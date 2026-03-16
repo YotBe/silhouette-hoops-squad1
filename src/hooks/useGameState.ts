@@ -3,10 +3,13 @@ import { Player, DifficultyTier, PLAYERS, TIER_CONFIG, getPlayersByTier, generat
 import { SFX, setSFXMuted } from './useSoundEffects';
 import { getDailyPlayers, getDailyChoices, isDailyChallengeCompleted, saveDailyResult, getDailyShareText, getDailySeed } from '@/utils/dailyChallenge';
 import { hapticSuccess, hapticError, hapticLight, hapticCountdown } from '@/utils/haptics';
-import { markCollected } from '@/utils/collection';
+import { markCollected, markSeen } from '@/utils/collection';
 import { getCollectedIds } from '@/utils/collection';
 import { PowerUpType, getInventory, usePowerUp as usePowerUpUtil, awardRandomPowerUp, PowerUpInventory } from '@/utils/powerups';
 import { updateAchievementStats, checkNewAchievements, getAchievementStats, Achievement } from '@/utils/achievements';
+import { xpToLevel } from '@/utils/levels';
+import { updateQuestProgress } from '@/utils/dailyQuests';
+import { recordMastery } from '@/utils/mastery';
 
 export type GamePhase = 'home' | 'playing' | 'reveal' | 'gameover';
 
@@ -41,7 +44,12 @@ interface GameState {
   eliminatedChoices: string[];
   gameHintsUsedTotal: number;
   prevStreak: number;
-  
+  isMysteryMode: boolean;
+  mysteryCluesRevealed: number;
+  leveledUp: boolean;
+  newLevel: number;
+  noHintCorrectThisGame: number;
+  mysteryCompletedThisGame: boolean;
 }
 
 const INITIAL_LIVES = 3;
@@ -108,7 +116,12 @@ export function useGameState() {
     eliminatedChoices: [],
     gameHintsUsedTotal: 0,
     prevStreak: 0,
-    
+    isMysteryMode: false,
+    mysteryCluesRevealed: 0,
+    leveledUp: false,
+    newLevel: 1,
+    noHintCorrectThisGame: 0,
+    mysteryCompletedThisGame: false,
   });
 
   const [xp, setXP] = useState(getStoredXP);
@@ -179,8 +192,10 @@ export function useGameState() {
       timerPaused: true, isBuzzerMode: false, buzzerTimeLeft: BUZZER_START_TIME,
       buzzerTimeDelta: null, activeSecondChance: false, eliminatedChoices: [],
       gameHintsUsedTotal: 0, prevStreak: 0,
+      isMysteryMode: false, mysteryCluesRevealed: 0,
+      leveledUp: false, newLevel: xpToLevel(xp), noHintCorrectThisGame: 0, mysteryCompletedThisGame: false,
     });
-  }, [clearTimer, clearBuzzerTimer, nextPlayer, refreshInventory]);
+  }, [clearTimer, clearBuzzerTimer, nextPlayer, refreshInventory, xp]);
 
   const startBuzzerBeater = useCallback(() => {
     clearTimer();
@@ -198,8 +213,38 @@ export function useGameState() {
       timerPaused: true, isBuzzerMode: true, buzzerTimeLeft: BUZZER_START_TIME,
       buzzerTimeDelta: null, activeSecondChance: false, eliminatedChoices: [],
       gameHintsUsedTotal: 0, prevStreak: 0,
+      isMysteryMode: false, mysteryCluesRevealed: 0,
+      leveledUp: false, newLevel: xpToLevel(xp), noHintCorrectThisGame: 0, mysteryCompletedThisGame: false,
     });
-  }, [clearTimer, clearBuzzerTimer, nextRandomPlayer, refreshInventory]);
+  }, [clearTimer, clearBuzzerTimer, nextRandomPlayer, refreshInventory, xp]);
+
+  const startMysteryMode = useCallback(() => {
+    clearTimer();
+    clearBuzzerTimer();
+    SFX.start();
+    const { player, choices, usedIds } = nextRandomPlayer([]);
+    refreshInventory();
+    setState({
+      phase: 'playing', tier: 'allstar', currentPlayer: player, choices,
+      lives: INITIAL_LIVES, score: 0, streak: 0, bestStreak: 0,
+      hintsUsed: 0, hintsRevealed: [], totalAnswered: 0, totalCorrect: 0,
+      lastAnswerCorrect: null, selectedAnswer: null, timeLeft: 999,
+      usedPlayerIds: usedIds, hintsRemaining: TOTAL_HINTS, xpEarned: 0,
+      answerHistory: [], isDailyMode: false, dailyPlayers: [], dailyRound: 0,
+      timerPaused: false, isBuzzerMode: false, buzzerTimeLeft: BUZZER_START_TIME,
+      buzzerTimeDelta: null, activeSecondChance: false, eliminatedChoices: [],
+      gameHintsUsedTotal: 0, prevStreak: 0,
+      isMysteryMode: true, mysteryCluesRevealed: 0,
+      leveledUp: false, newLevel: xpToLevel(xp), noHintCorrectThisGame: 0, mysteryCompletedThisGame: false,
+    });
+  }, [clearTimer, clearBuzzerTimer, nextRandomPlayer, refreshInventory, xp]);
+
+  const revealNextClue = useCallback(() => {
+    setState(prev => {
+      if (!prev.isMysteryMode || prev.mysteryCluesRevealed >= 3) return prev;
+      return { ...prev, mysteryCluesRevealed: prev.mysteryCluesRevealed + 1 };
+    });
+  }, []);
 
   const startDailyChallenge = useCallback(() => {
     if (isDailyChallengeCompleted()) return;
@@ -220,9 +265,10 @@ export function useGameState() {
       timerPaused: true, isBuzzerMode: false, buzzerTimeLeft: BUZZER_START_TIME,
       buzzerTimeDelta: null, activeSecondChance: false, eliminatedChoices: [],
       gameHintsUsedTotal: 0, prevStreak: 0,
-      
+      isMysteryMode: false, mysteryCluesRevealed: 0,
+      leveledUp: false, newLevel: xpToLevel(xp), noHintCorrectThisGame: 0, mysteryCompletedThisGame: false,
     });
-  }, [clearTimer, clearBuzzerTimer, refreshInventory]);
+  }, [clearTimer, clearBuzzerTimer, refreshInventory, xp]);
 
   const setVideoReady = useCallback(() => {
     setState(prev => ({ ...prev, timerPaused: false }));
@@ -280,8 +326,13 @@ export function useGameState() {
         };
       }
 
+      markSeen(prev.currentPlayer!.id);
+
       if (correct) {
         SFX.correct(); hapticSuccess(); markCollected(prev.currentPlayer!.id);
+        // Record mastery
+        const maxTime = prev.isBuzzerMode ? 999 : TIER_CONFIG[prev.tier].timerSeconds;
+        recordMastery(prev.currentPlayer!.id, prev.timeLeft / maxTime, prev.hintsRevealed.length);
         // Track guess distribution by hints used
         try {
           const dist = JSON.parse(localStorage.getItem('sg_guess_distribution') || '{}');
@@ -320,10 +371,14 @@ export function useGameState() {
       const streakMultiplier = Math.min(1 + Math.floor(prev.streak / 3) * 0.5, 3);
       const hintPenalty = prev.hintsRevealed.length * 20;
       const speedBonus = prev.isBuzzerMode ? 0 : Math.round(prev.timeLeft * 2);
-      const basePoints = correct ? Math.max(100 - hintPenalty, 25) : 0;
-      const points = Math.round(basePoints * streakMultiplier) + (correct ? speedBonus : 0);
+      const mysteryBase = prev.isMysteryMode ? Math.max((3 - prev.mysteryCluesRevealed) * 30, 25) : 0;
+      const basePoints = correct
+        ? (prev.isMysteryMode ? mysteryBase : Math.max(100 - hintPenalty, 25))
+        : 0;
+      const points = Math.round(basePoints * streakMultiplier) + (correct && !prev.isMysteryMode ? speedBonus : 0);
       const baseXP = correct ? (newStreak > 3 ? 100 : 50) : 0;
       const roundXP = correct ? Math.max(baseXP - prev.hintsRevealed.length * Math.round(baseXP * 0.15), 10) : 0;
+      const noHintCorrect = correct && prev.hintsRevealed.length === 0;
 
       // Buzzer mode
       if (prev.isBuzzerMode) {
@@ -378,6 +433,8 @@ export function useGameState() {
         answerHistory: [...prev.answerHistory, { correct, hintsUsed: prev.hintsRevealed.length }],
         buzzerTimeDelta: null,
         prevStreak: prev.streak,
+        noHintCorrectThisGame: prev.noHintCorrectThisGame + (noHintCorrect ? 1 : 0),
+        mysteryCluesRevealed: 0, // reset for next round in mystery mode
       };
     });
   }, [clearTimer, state.isBuzzerMode, refreshInventory]);
@@ -435,6 +492,8 @@ export function useGameState() {
           };
           saveDailyResult(result);
           const newXP = xp + prev.xpEarned;
+          const prevLevel = xpToLevel(xp);
+          const newLevel = xpToLevel(newXP);
           setXP(newXP);
           localStorage.setItem('sg_xp', String(newXP));
 
@@ -444,7 +503,7 @@ export function useGameState() {
           setScoreHistory(newHistory);
           localStorage.setItem('sg_history', JSON.stringify(newHistory));
 
-          return { ...prev, phase: 'gameover' as GamePhase };
+          return { ...prev, phase: 'gameover' as GamePhase, leveledUp: newLevel > prevLevel, newLevel };
         }
         const nextPlayerDaily = prev.dailyPlayers[nextRound];
         const choices = getDailyChoices(nextPlayerDaily);
@@ -461,6 +520,8 @@ export function useGameState() {
       if (prev.lives <= 0) {
         SFX.gameOver();
         const newXP = xp + prev.xpEarned;
+        const prevLevel = xpToLevel(xp);
+        const newLevel = xpToLevel(newXP);
         setXP(newXP);
         localStorage.setItem('sg_xp', String(newXP));
 
@@ -476,7 +537,11 @@ export function useGameState() {
         setScoreHistory(newHistory);
         localStorage.setItem('sg_history', JSON.stringify(newHistory));
 
-        return { ...prev, phase: 'gameover' as GamePhase };
+        return {
+          ...prev, phase: 'gameover' as GamePhase,
+          leveledUp: newLevel > prevLevel,
+          newLevel,
+        };
       }
 
       const { player, choices, usedIds } = nextPlayer(prev.tier, prev.usedPlayerIds);
@@ -487,7 +552,7 @@ export function useGameState() {
         hintsRevealed: [], timeLeft: TIER_CONFIG[prev.tier].timerSeconds,
         usedPlayerIds: usedIds, timerPaused: true,
         eliminatedChoices: [], activeSecondChance: false,
-        
+        mysteryCluesRevealed: 0,
       };
     });
   }, [xp, highScores, scoreHistory, nextPlayer]);
@@ -583,6 +648,15 @@ export function useGameState() {
         hintsNeverUsed: currentStats.hintsNeverUsed + (state.gameHintsUsedTotal === 0 && state.totalCorrect > 0 ? 1 : 0),
       });
 
+      // Update daily quests
+      updateQuestProgress({
+        bestStreak: state.bestStreak,
+        noHintCorrect: state.noHintCorrectThisGame,
+        dailyCompleted: state.isDailyMode,
+        totalCorrect: state.totalCorrect,
+        mysteryCompleted: state.mysteryCompletedThisGame,
+      });
+
       const newlyUnlocked = checkNewAchievements();
       if (newlyUnlocked.length > 0) {
         setNewAchievements(newlyUnlocked);
@@ -590,6 +664,8 @@ export function useGameState() {
 
       if (state.isBuzzerMode) {
         const newXP = xp + state.xpEarned;
+        const prevLevel = xpToLevel(xp);
+        const newLevel = xpToLevel(newXP);
         setXP(newXP);
         localStorage.setItem('sg_xp', String(newXP));
 
@@ -604,6 +680,10 @@ export function useGameState() {
         const newHistory = [entry, ...scoreHistory].slice(0, 50);
         setScoreHistory(newHistory);
         localStorage.setItem('sg_history', JSON.stringify(newHistory));
+
+        if (newLevel > prevLevel) {
+          setState(prev => ({ ...prev, leveledUp: true, newLevel }));
+        }
       }
     }
   }, [state.phase]);
@@ -654,6 +734,8 @@ export function useGameState() {
     startGame,
     startBuzzerBeater,
     startDailyChallenge,
+    startMysteryMode,
+    revealNextClue,
     setVideoReady,
     submitAnswer,
     continueGame,

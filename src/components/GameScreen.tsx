@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Player, TIER_CONFIG, DifficultyTier } from '@/data/players';
 import { BlurredVideoPlayer } from './BlurredVideoPlayer';
+import { MysteryClueCard } from './MysteryClueCard';
 import { PowerUpBar } from './PowerUpBar';
 import { Flame, Volume2, VolumeX, Timer, X, Shirt, Lock, Check } from 'lucide-react';
 import { PowerUpType, PowerUpInventory } from '@/utils/powerups';
@@ -24,12 +25,15 @@ interface Props {
   activeSecondChance: boolean;
   eliminatedChoices: string[];
   nextPlayerVideoFile?: string | null;
+  isMysteryMode?: boolean;
+  mysteryCluesRevealed?: number;
   onAnswer: (playerId: string) => void;
   onHint: () => void;
   onHome: () => void;
   onToggleMute: () => void;
   onVideoReady: () => void;
   onUsePowerUp: (type: PowerUpType) => void;
+  onRevealClue?: () => void;
 }
 
 function getTimerColor(timeLeft: number, maxTime: number): string {
@@ -57,7 +61,8 @@ export function GameScreen({
   isBuzzerMode = false, buzzerTimeLeft = 60, buzzerTimeDelta,
   powerUpInventory, activeSecondChance, eliminatedChoices,
   nextPlayerVideoFile,
-  onAnswer, onHint, onHome, onToggleMute, onVideoReady, onUsePowerUp
+  isMysteryMode = false, mysteryCluesRevealed = 0,
+  onAnswer, onHint, onHome, onToggleMute, onVideoReady, onUsePowerUp, onRevealClue
 }: Props) {
   const config = TIER_CONFIG[tier];
   const maxTime = isDailyMode ? 15 : config.timerSeconds;
@@ -70,7 +75,20 @@ export function GameScreen({
   const [hintCostFlash, setHintCostFlash] = useState(false);
   const [answeredId, setAnsweredId] = useState<string | null>(null);
   const [flashRed, setFlashRed] = useState(false);
+  const [showMultiplierBanner, setShowMultiplierBanner] = useState(false);
+  const prevStreakRef = useRef(streak);
   const multiplier = getMultiplierDisplay(streak);
+
+  // Show multiplier banner when streak crosses 3, 6, 9...
+  useEffect(() => {
+    const prev = prevStreakRef.current;
+    prevStreakRef.current = streak;
+    if (streak > 0 && streak % 3 === 0 && streak !== prev) {
+      setShowMultiplierBanner(true);
+      const t = setTimeout(() => setShowMultiplierBanner(false), 900);
+      return () => clearTimeout(t);
+    }
+  }, [streak]);
 
   // SVG ring calculations
   const ringRadius = 18;
@@ -81,6 +99,11 @@ export function GameScreen({
     setImageReady(true);
     onVideoReady();
   };
+
+  const handleMysteryReady = useCallback(() => {
+    setImageReady(true);
+    onVideoReady();
+  }, [onVideoReady]);
 
   useEffect(() => { setImageReady(false); setAnsweredId(null); setFlashRed(false); }, [currentPlayer.id]);
 
@@ -181,6 +204,18 @@ export function GameScreen({
         <div className="absolute inset-0 z-[60] pointer-events-none bg-game-wrong/30 animate-flash-red" />
       )}
 
+      {/* Multiplier banner */}
+      {showMultiplierBanner && multiplier && (
+        <div className="absolute inset-x-0 top-20 z-[55] flex items-center justify-center pointer-events-none">
+          <div className="animate-multiplier-announce px-6 py-2 rounded-2xl glass border border-game-gold/30"
+            style={{ background: 'hsl(var(--game-gold) / 0.15)' }}>
+            <span className={`font-display text-2xl tracking-widest ${multiplier.color}`}>
+              {multiplier.text} MULTIPLIER!
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Feedback border flash */}
       {feedbackState && (
         <div className={`absolute inset-0 z-50 pointer-events-none border-4 rounded-none ${
@@ -225,7 +260,7 @@ export function GameScreen({
 
       <div className="flex flex-col flex-1 px-3 pt-2 pb-[env(safe-area-inset-bottom,4px)] animate-slide-up min-h-0 relative z-10 justify-between gap-1">
         {/* Glass HUD Bar */}
-        <div className="glass rounded-2xl px-3 py-2 flex items-center justify-between flex-shrink-0">
+        <div className="glass-strong rounded-2xl px-3 py-2 flex items-center justify-between flex-shrink-0 border border-white/[0.07]">
           {/* Left: Close */}
           <button onClick={onHome} className="text-muted-foreground press-scale p-1" aria-label="Go home">
             <X className="w-5 h-5" />
@@ -318,25 +353,35 @@ export function GameScreen({
           )}
         </div>
 
-        {/* Video Container */}
+        {/* Video / Mystery Container */}
         <div className="flex-1 flex flex-col items-center justify-center min-h-0 max-h-[55vh]">
-          <div className="relative w-full">
-            <BlurredVideoPlayer
+          {isMysteryMode ? (
+            <MysteryClueCard
               key={currentPlayer.id}
-              videoFile={currentPlayer.videoFile}
-              imageUrl={currentPlayer.imageUrl}
-              onReady={handleImageReady}
+              player={currentPlayer}
+              cluesRevealed={mysteryCluesRevealed}
+              onRevealClue={onRevealClue ?? (() => {})}
+              onReady={handleMysteryReady}
             />
-            {/* Vignette overlay at ≤3s */}
-            {timeLeft <= 3 && !isBuzzerMode && (
-              <div
-                className="absolute inset-0 z-[3] pointer-events-none rounded-2xl animate-vignette-pulse"
-                style={{
-                  background: 'radial-gradient(ellipse at center, transparent 40%, hsl(var(--game-wrong) / 0.3) 100%)',
-                }}
+          ) : (
+            <div className="relative w-full">
+              <BlurredVideoPlayer
+                key={currentPlayer.id}
+                videoFile={currentPlayer.videoFile}
+                imageUrl={currentPlayer.imageUrl}
+                onReady={handleImageReady}
               />
-            )}
-          </div>
+              {/* Vignette overlay at ≤3s */}
+              {timeLeft <= 3 && !isBuzzerMode && (
+                <div
+                  className="absolute inset-0 z-[3] pointer-events-none rounded-2xl animate-vignette-pulse"
+                  style={{
+                    background: 'radial-gradient(ellipse at center, transparent 40%, hsl(var(--game-wrong) / 0.3) 100%)',
+                  }}
+                />
+              )}
+            </div>
+          )}
         </div>
 
         {/* Power-ups row (horizontal, below video) */}
@@ -399,13 +444,13 @@ export function GameScreen({
 
             let feedbackClass = '';
             if (isAnswered && isThis && feedbackState === 'correct') {
-              feedbackClass = 'border-game-correct bg-game-correct/20 text-game-correct ring-2 ring-game-correct/40';
+              feedbackClass = 'border-game-correct bg-game-correct/20 text-game-correct shadow-[0_0_16px_hsl(var(--game-correct)/0.3)]';
             } else if (isAnswered && isThis && feedbackState === 'wrong') {
-              feedbackClass = 'border-game-wrong bg-game-wrong/20 text-game-wrong ring-2 ring-game-wrong/40';
+              feedbackClass = 'border-game-wrong bg-game-wrong/20 text-game-wrong shadow-[0_0_16px_hsl(var(--game-wrong)/0.3)]';
             } else if (isAnswered && feedbackState === 'wrong' && isCorrectChoice) {
-              feedbackClass = 'border-game-correct bg-game-correct/20 text-game-correct ring-2 ring-game-correct/40';
+              feedbackClass = 'border-game-correct bg-game-correct/20 text-game-correct shadow-[0_0_16px_hsl(var(--game-correct)/0.3)]';
             } else if (isAnswered && !isThis) {
-              feedbackClass = 'opacity-30';
+              feedbackClass = 'opacity-20';
             }
 
             return (
@@ -413,17 +458,21 @@ export function GameScreen({
                 key={choice.id}
                 onClick={() => handleAnswer(choice.id)}
                 disabled={!imageReady || isEliminated || isAnswered}
-                className={`answer-button-press min-h-[56px] py-2 px-3 text-sm font-semibold rounded-xl border-l-2 border transition-all duration-150 flex items-center ${
+                style={{
+                  animation: imageReady ? `slide-up-fast 250ms ease-out ${idx * 50}ms both` : undefined,
+                  opacity: imageReady ? undefined : 0,
+                }}
+                className={`answer-button-press min-h-[62px] py-2.5 px-3.5 text-sm font-bold rounded-2xl border transition-all duration-150 flex items-center gap-2 ${
                   feedbackClass || (isEliminated
-                    ? 'border-border/30 border-l-border/30 bg-card/30 text-muted-foreground/30 line-through opacity-30'
-                    : 'glass border-foreground/10 border-l-primary/40 text-foreground active:scale-95 active:border-primary active:bg-primary/20 hover:border-foreground/20')
+                    ? 'border-border/20 bg-card/20 text-muted-foreground/25 line-through opacity-25'
+                    : 'bg-white/[0.04] border-white/[0.09] text-foreground active:scale-[0.97] active:bg-primary/15 active:border-primary/50 hover:bg-white/[0.07] hover:border-white/[0.14]')
                 }`}
               >
-                <span className="text-[9px] text-muted-foreground/40 mr-1.5 font-score">{idx + 1}</span>
-                <span className="flex-1 text-left">{choice.name}</span>
-                {isAnswered && isThis && feedbackState === 'correct' && <Check className="w-4 h-4 text-game-correct ml-1" />}
-                {isAnswered && isThis && feedbackState === 'wrong' && <X className="w-4 h-4 text-game-wrong ml-1" />}
-                {isAnswered && feedbackState === 'wrong' && isCorrectChoice && !isThis && <Check className="w-4 h-4 text-game-correct ml-1" />}
+                <span className="w-5 h-5 rounded-lg bg-white/[0.06] flex items-center justify-center text-[9px] font-score text-muted-foreground/50 flex-shrink-0">{idx + 1}</span>
+                <span className="flex-1 text-left text-[13px] leading-tight">{choice.name}</span>
+                {isAnswered && isThis && feedbackState === 'correct' && <Check className="w-4 h-4 text-game-correct flex-shrink-0" strokeWidth={2.5} />}
+                {isAnswered && isThis && feedbackState === 'wrong' && <X className="w-4 h-4 text-game-wrong flex-shrink-0" strokeWidth={2.5} />}
+                {isAnswered && feedbackState === 'wrong' && isCorrectChoice && !isThis && <Check className="w-4 h-4 text-game-correct flex-shrink-0" strokeWidth={2.5} />}
               </button>
             );
           })}

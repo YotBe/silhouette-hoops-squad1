@@ -23,7 +23,7 @@ export function BlurredVideoPlayer({ videoFile, imageUrl, onReady }: Props) {
 
   return (
     <div
-      className="relative mx-auto overflow-hidden rounded-2xl w-full bg-card aspect-video max-h-[55vh]"
+      className="relative mx-auto overflow-hidden rounded-2xl w-full bg-card aspect-[4/3]"
       style={{ boxShadow: '0 0 40px rgba(59, 130, 246, 0.1)' }}
     >
       {/* Skeleton shimmer loader */}
@@ -77,7 +77,7 @@ export function BlurredVideoPlayer({ videoFile, imageUrl, onReady }: Props) {
 
       {/* Bottom gradient fade into background */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-[35%] z-[2] pointer-events-none"
+        className="absolute bottom-0 left-0 right-0 h-[18%] z-[2] pointer-events-none"
         style={{ background: 'linear-gradient(to bottom, transparent, hsl(var(--background)))' }}
       />
     </div>

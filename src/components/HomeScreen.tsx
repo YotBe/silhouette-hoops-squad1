@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DifficultyTier, TIER_CONFIG } from '@/data/players';
-import { Volume2, VolumeX, Calendar, Check, Smartphone, Timer, Flame, ChevronRight, Bell, Lock } from 'lucide-react';
+import { Volume2, VolumeX, Calendar, Check, Smartphone, Timer, Flame, ChevronRight, Bell, Lock, Pencil, X as XIcon } from 'lucide-react';
 import { InstallBanner } from '@/components/InstallBanner';
 import { isDailyChallengeCompleted, getDailyResult, getTimeUntilNextChallenge } from '@/utils/dailyChallenge';
 import { isHapticsEnabled, setHapticsEnabled, isWelcomeHapticsEnabled, setWelcomeHapticsEnabled } from '@/utils/haptics';
@@ -8,6 +8,10 @@ import { checkAndUpdateStreak, getStreakInfo, claimStreakReward, type StreakInfo
 import { trackEvent } from '@/utils/analytics';
 import { checkDailyReward, type DailyReward } from '@/utils/dailyRewards';
 import { DailyRewardModal } from '@/components/DailyRewardModal';
+import { DailyQuestsWidget } from '@/components/DailyQuestsWidget';
+import { TutorialOverlay } from '@/components/TutorialOverlay';
+import { levelProgress } from '@/utils/levels';
+import { getNextAchievement } from '@/utils/achievements';
 
 interface Props {
   tier: DifficultyTier;
@@ -15,6 +19,7 @@ interface Props {
   startGame: (t: DifficultyTier) => void;
   startDailyChallenge: () => void;
   startBuzzerBeater: () => void;
+  startMysteryMode: () => void;
   highScores: Record<string, number>;
   xp: number;
   unlockedTiers: DifficultyTier[];
@@ -28,9 +33,16 @@ function getDailyChallengeNumber(): number {
   return Math.floor((now - start) / (1000 * 60 * 60 * 24)) + 1;
 }
 
-export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, startBuzzerBeater, highScores, xp, unlockedTiers, isMuted, onToggleMute }: Props) {
+function getStoredName(): string {
+  try { return localStorage.getItem('sg_player_name') || ''; } catch { return ''; }
+}
+
+export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, startBuzzerBeater, startMysteryMode, highScores, xp, unlockedTiers, isMuted, onToggleMute }: Props) {
   const [hapticsOn, setHapticsOn] = useState(isHapticsEnabled);
   const [welcomeHapticsOn, setWelcomeHapticsOn] = useState(isWelcomeHapticsEnabled);
+  const [playerName, setPlayerName] = useState(getStoredName);
+  const [editingName, setEditingName] = useState(() => !getStoredName());
+  const [nameInput, setNameInput] = useState(getStoredName);
   const dailyCompleted = isDailyChallengeCompleted();
   const dailyResult = getDailyResult();
   const [countdown, setCountdown] = useState(getTimeUntilNextChallenge());
@@ -41,9 +53,12 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
   const dailyNum = getDailyChallengeNumber();
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   const [dailyReward, setDailyReward] = useState<DailyReward | null>(null);
+  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('sg_tutorial_seen'));
+  const lvl = levelProgress(xp);
+  const nextAchievement = getNextAchievement();
 
   useEffect(() => {
-    const interval = setInterval(() => setCountdown(getTimeUntilNextChallenge()), 100);
+    const interval = setInterval(() => setCountdown(getTimeUntilNextChallenge()), 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -66,8 +81,18 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
     setHapticsEnabled(next);
   };
 
+  const saveName = () => {
+    const trimmed = nameInput.trim().slice(0, 20);
+    if (!trimmed) return;
+    setPlayerName(trimmed);
+    setNameInput(trimmed);
+    try { localStorage.setItem('sg_player_name', trimmed); } catch {}
+    setEditingName(false);
+  };
+
   return (
     <>
+    {showTutorial && <TutorialOverlay onDone={() => setShowTutorial(false)} />}
     {dailyReward && <DailyRewardModal reward={dailyReward} onClose={() => setDailyReward(null)} />}
     <div className="relative flex flex-col items-center min-h-screen-safe px-5 pb-24 animate-slide-up bg-background overflow-y-auto">
       {/* Top bar */}
@@ -95,6 +120,55 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
         </div>
       </div>
 
+      {/* Player name / greeting */}
+      {editingName ? (
+        <div className="w-full max-w-sm mb-4 animate-scale-in">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-widest text-center mb-2">
+            {playerName ? 'Change your name' : "What's your name?"}
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { if (playerName) setEditingName(false); } }}
+              placeholder="Enter your name..."
+              maxLength={20}
+              autoFocus
+              className="flex-1 px-4 py-2.5 rounded-xl bg-white/[0.07] border border-white/[0.12] text-foreground text-sm font-semibold placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
+            />
+            <button
+              onClick={saveName}
+              disabled={!nameInput.trim()}
+              className="px-4 py-2.5 rounded-xl gradient-hero text-white text-sm font-bold press-scale disabled:opacity-40"
+            >
+              Save
+            </button>
+            {playerName && (
+              <button onClick={() => setEditingName(false)} className="p-2.5 rounded-xl glass border border-white/[0.08] press-scale">
+                <XIcon className="w-4 h-4 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="w-full max-w-sm mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Welcome back</p>
+            <h2 className="font-display text-xl text-foreground tracking-wider" style={{ textShadow: '0 0 20px hsl(var(--primary)/0.3)' }}>
+              {playerName} 👋
+            </h2>
+          </div>
+          <button
+            onClick={() => { setNameInput(playerName); setEditingName(true); }}
+            className="p-2 rounded-xl glass border border-white/[0.08] press-scale"
+            aria-label="Edit name"
+          >
+            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        </div>
+      )}
+
       {/* Mystery Silhouette Icon */}
       <div className="relative mb-3 animate-mystery-pulse" style={{ filter: 'drop-shadow(0 0 15px rgba(59,130,246,0.4))' }}>
         <svg width="80" height="80" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -120,43 +194,58 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
         <span className="text-xs text-primary font-semibold">· DAILY #{dailyNum}</span>
       </div>
 
-      {/* XP progress bar */}
-      {(() => {
-        const tiers = Object.keys(TIER_CONFIG) as DifficultyTier[];
-        const nextTier = tiers.find(t => xp < TIER_CONFIG[t].xpRequired);
-        const currentTierConfig = TIER_CONFIG[tiers.filter(t => xp >= TIER_CONFIG[t].xpRequired).pop()!];
-        const nextTierConfig = nextTier ? TIER_CONFIG[nextTier] : null;
-        const fromXP = nextTier ? tiers.filter(t => TIER_CONFIG[t].xpRequired < TIER_CONFIG[nextTier].xpRequired).pop() : null;
-        const fromXPVal = fromXP ? TIER_CONFIG[fromXP].xpRequired : 0;
-        const pct = nextTierConfig
-          ? Math.min(((xp - fromXPVal) / (nextTierConfig.xpRequired - fromXPVal)) * 100, 100)
-          : 100;
-        return (
-          <div className="w-full max-w-sm mb-5">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-score text-muted-foreground">⭐ {xp} XP</span>
-              {nextTierConfig ? (
-                <span className="text-[10px] text-muted-foreground" style={{ color: `hsl(${nextTierConfig.color})` }}>
-                  {nextTier} unlocks at {nextTierConfig.xpRequired} XP
-                </span>
-              ) : (
-                <span className="text-[10px] text-game-gold">MAX TIER UNLOCKED</span>
-              )}
-            </div>
-            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${pct}%`,
-                  background: nextTierConfig
-                    ? `hsl(${nextTierConfig.color})`
-                    : 'hsl(var(--game-gold))',
-                }}
-              />
+      {/* Level badge + XP progress bar */}
+      <div className="w-full max-w-sm mb-5">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <span className="font-display text-lg text-game-gold" style={{ textShadow: '0 0 10px hsl(var(--game-gold)/0.5)' }}>
+              LEVEL {lvl.level}
+            </span>
+            <span className="text-[10px] font-score text-muted-foreground">⭐ {xp} XP</span>
+          </div>
+          <span className="text-[10px] text-muted-foreground font-score">
+            {lvl.nextLevelXP - xp} to Lvl {lvl.level + 1}
+          </span>
+        </div>
+        <div className="h-2 bg-secondary rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${lvl.pct}%`,
+              background: 'linear-gradient(90deg, hsl(var(--game-gold)), hsl(var(--accent)))',
+            }}
+          />
+        </div>
+
+        {/* Next achievement widget */}
+        {nextAchievement && (
+          <div className="mt-2 flex items-center gap-2 px-2 py-1.5 rounded-lg glass border border-[rgba(255,255,255,0.06)]">
+            <span className="text-base">{nextAchievement.achievement.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-foreground truncate">{nextAchievement.achievement.title}</span>
+                <span className="text-[9px] text-muted-foreground ml-1">{nextAchievement.label}</span>
+              </div>
+              <div className="h-0.5 bg-secondary rounded-full overflow-hidden mt-0.5">
+                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${nextAchievement.pct * 100}%` }} />
+              </div>
             </div>
           </div>
-        );
-      })()}
+        )}
+
+        {/* Tier unlock bar (condensed) */}
+        {(() => {
+          const tiers = Object.keys(TIER_CONFIG) as DifficultyTier[];
+          const nextTier = tiers.find(t => xp < TIER_CONFIG[t].xpRequired);
+          if (!nextTier) return <span className="text-[9px] text-game-gold block text-right mt-1">MAX TIER UNLOCKED</span>;
+          const nextTierConfig = TIER_CONFIG[nextTier];
+          return (
+            <p className="text-[9px] text-muted-foreground text-right mt-1" style={{ color: `hsl(${nextTierConfig.color})` }}>
+              {nextTier} tier unlocks at {nextTierConfig.xpRequired} XP
+            </p>
+          );
+        })()}
+      </div>
 
       {/* Streak reward */}
       {streakReward && (
@@ -214,14 +303,16 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
       </div>
 
       {/* PLAY Button with shimmer */}
-      <div className="relative w-full max-w-sm mb-2">
+      <div className="relative w-full max-w-sm mb-1.5">
         <button
           onClick={() => startGame(tier)}
           className="relative w-full py-4 rounded-2xl gradient-hero text-white font-display text-2xl tracking-widest press-scale transition-all active:scale-[0.97] overflow-hidden"
-          style={{ boxShadow: '0 4px 25px rgba(59, 130, 246, 0.4)' }}
+          style={{ boxShadow: '0 6px 30px rgba(59, 130, 246, 0.45), 0 2px 8px rgba(59, 130, 246, 0.2)' }}
         >
-          <span className="relative z-10">PLAY {TIER_CONFIG[tier].label.toUpperCase()}</span>
+          <span className="relative z-10 drop-shadow-sm">PLAY {TIER_CONFIG[tier].label.toUpperCase()}</span>
           <div className="absolute inset-0 animate-shimmer rounded-2xl" />
+          {/* inner top highlight */}
+          <div className="absolute inset-x-0 top-0 h-px bg-white/30 rounded-t-2xl" />
         </button>
       </div>
       {endlessHS > 0 && (
@@ -229,75 +320,116 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
       )}
       {!endlessHS && <div className="mb-4" />}
 
-      {/* Daily Challenge Card */}
-      <button
-        onClick={() => !dailyCompleted && startDailyChallenge()}
-        disabled={dailyCompleted}
-        className="w-full max-w-sm mb-1 p-4 rounded-2xl glass border border-[rgba(255,255,255,0.08)] transition-all press-scale active:scale-[0.97] relative overflow-hidden"
-      >
-        <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl bg-primary" />
-        {!dailyCompleted && <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl bg-primary animate-daily-glow" />}
-        <div className="flex items-center gap-3 pl-3">
-          <Calendar className={`w-5 h-5 flex-shrink-0 ${dailyCompleted ? 'text-game-correct' : 'text-primary'}`} />
-          <div className="text-left flex-1">
-            <span className="font-display text-sm tracking-wider block text-foreground">📅 DAILY CHALLENGE</span>
+      {/* Game Modes */}
+      <div className="w-full max-w-sm mb-5 flex flex-col gap-2.5">
+        {/* Daily Challenge Card */}
+        <button
+          onClick={() => !dailyCompleted && startDailyChallenge()}
+          disabled={dailyCompleted}
+          className="w-full rounded-2xl overflow-hidden border border-primary/25 relative transition-all press-scale active:scale-[0.97]"
+          style={{ background: 'linear-gradient(135deg, hsl(217 91% 60% / 0.12) 0%, hsl(217 91% 60% / 0.04) 100%)' }}
+        >
+          {/* Top accent line */}
+          <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-primary/80 via-primary/40 to-transparent" />
+          {!dailyCompleted && <div className="absolute top-0 left-0 right-0 h-[1.5px] animate-daily-glow" style={{ background: 'linear-gradient(90deg, hsl(var(--primary)), transparent)' }} />}
+          <div className="flex items-center gap-3.5 p-4">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${dailyCompleted ? 'bg-game-correct/15' : 'bg-primary/15'}`}>
+              <Calendar className={`w-5 h-5 ${dailyCompleted ? 'text-game-correct' : 'text-primary'}`} />
+            </div>
+            <div className="text-left flex-1 min-w-0">
+              <span className="font-display text-base tracking-wider block text-foreground">DAILY CHALLENGE</span>
+              {dailyCompleted ? (
+                <span className="text-[11px] text-game-correct flex items-center gap-1">
+                  <Check className="w-3 h-3" /> Score: {dailyResult?.score ?? 0}
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">3 players · 1 attempt · resets daily</span>
+              )}
+            </div>
             {dailyCompleted ? (
-              <span className="text-[11px] text-game-correct flex items-center gap-1">
-                <Check className="w-3 h-3" /> Score: {dailyResult?.score ?? 0}
-              </span>
+              <div className="text-right flex-shrink-0">
+                <span className="text-[10px] text-muted-foreground font-score block">{countdown.hours}h {String(countdown.minutes).padStart(2, '0')}m</span>
+                <span className="text-[9px] text-muted-foreground/60">until reset</span>
+              </div>
             ) : (
-              <span className="text-[11px] text-muted-foreground">3 players · 1 attempt</span>
+              <ChevronRight className="w-4 h-4 text-primary/60 flex-shrink-0" />
             )}
           </div>
-          {dailyCompleted ? (
-            <span className="text-[10px] text-muted-foreground font-score">
-              {countdown.hours}h {String(countdown.minutes).padStart(2, '0')}m
-            </span>
-          ) : (
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          {!dailyCompleted && (
+            <div className="px-4 pb-3 -mt-1">
+              <p className="text-[10px] text-muted-foreground/70 italic">
+                {(() => {
+                  const teasers = [
+                    "Today's disguise: 🤡 Think you can spot them?",
+                    "One player is in a wig — can you ID them? 🎭",
+                    "Clown nose or face paint? Today's a tricky one 🤔",
+                    "They're hiding in plain sight... 👀",
+                    "Even their teammates wouldn't recognize them 😂",
+                    "Sunglasses + fake mustache = chaos 🕶️",
+                    "Today's players went ALL out with costumes 🎪",
+                  ];
+                  const seed = new Date().toISOString().slice(0, 10).split('-').reduce((a, b) => a + parseInt(b), 0);
+                  return teasers[seed % teasers.length];
+                })()}
+              </p>
+            </div>
           )}
-        </div>
-      </button>
-      {/* Daily teaser */}
-      {!dailyCompleted && (
-        <p className="text-[10px] text-muted-foreground italic mb-3 max-w-sm text-center">
-          {(() => {
-            const teasers = [
-              "Today's disguise: 🤡 Think you can spot them?",
-              "One player is in a wig — can you ID them? 🎭",
-              "Clown nose or face paint? Today's a tricky one 🤔",
-              "They're hiding in plain sight... 👀",
-              "Even their teammates wouldn't recognize them 😂",
-              "Sunglasses + fake mustache = chaos 🕶️",
-              "Today's players went ALL out with costumes 🎪",
-            ];
-            const seed = new Date().toISOString().slice(0, 10).split('-').reduce((a, b) => a + parseInt(b), 0);
-            return teasers[seed % teasers.length];
-          })()}
-        </p>
-      )}
-      {dailyCompleted && <div className="mb-3" />}
+        </button>
 
-      {/* Buzzer Beater Card */}
-      <button
-        onClick={startBuzzerBeater}
-        className="w-full max-w-sm mb-4 p-4 rounded-2xl glass border border-[rgba(255,255,255,0.08)] transition-all press-scale active:scale-[0.97] relative overflow-hidden"
-      >
-        <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl bg-accent animate-buzzer-glow" />
-        <div className="flex items-center gap-3 pl-3">
-          <Timer className="w-5 h-5 text-accent flex-shrink-0" />
-          <div className="text-left flex-1">
-            <span className="font-display text-sm tracking-wider block text-foreground">🚨 BUZZER BEATER</span>
-            <span className="text-[11px] text-muted-foreground">60s survival · +3s/-5s</span>
+        {/* Buzzer Beater Card */}
+        <button
+          onClick={startBuzzerBeater}
+          className="w-full rounded-2xl overflow-hidden border border-accent/25 relative transition-all press-scale active:scale-[0.97]"
+          style={{ background: 'linear-gradient(135deg, hsl(16 100% 58% / 0.12) 0%, hsl(16 100% 58% / 0.04) 100%)' }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-[1.5px] animate-buzzer-glow" style={{ background: 'linear-gradient(90deg, hsl(var(--accent)), transparent)' }} />
+          <div className="flex items-center gap-3.5 p-4">
+            <div className="w-11 h-11 rounded-xl bg-accent/15 flex items-center justify-center flex-shrink-0">
+              <Timer className="w-5 h-5 text-accent" />
+            </div>
+            <div className="text-left flex-1">
+              <span className="font-display text-base tracking-wider block text-foreground">BUZZER BEATER</span>
+              <span className="text-[11px] text-muted-foreground">60s survival · correct +3s · wrong −5s</span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {buzzerHS > 0 && (
+                <div className="text-right">
+                  <span className="text-[9px] text-muted-foreground/60 block">best</span>
+                  <span className="text-[11px] text-game-gold font-score">🏆 {buzzerHS}</span>
+                </div>
+              )}
+              <ChevronRight className="w-4 h-4 text-accent/60" />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {buzzerHS > 0 && (
-              <span className="text-[10px] text-game-gold font-score">🏆 {buzzerHS}</span>
-            )}
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        </button>
+
+        {/* Mystery Mode Card */}
+        <button
+          onClick={startMysteryMode}
+          className="w-full rounded-2xl overflow-hidden relative transition-all press-scale active:scale-[0.97]"
+          style={{
+            background: 'linear-gradient(135deg, hsl(280 67% 52% / 0.12) 0%, hsl(280 67% 52% / 0.04) 100%)',
+            borderColor: 'hsl(280 67% 52% / 0.25)',
+            borderWidth: '1px',
+            borderStyle: 'solid',
+          }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-[1.5px]" style={{ background: 'linear-gradient(90deg, hsl(280 67% 52% / 0.8), transparent)' }} />
+          <div className="flex items-center gap-3.5 p-4">
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 text-xl" style={{ background: 'hsl(280 67% 52% / 0.15)' }}>
+              🔮
+            </div>
+            <div className="text-left flex-1">
+              <span className="font-display text-base tracking-wider block text-foreground">MYSTERY MODE</span>
+              <span className="text-[11px] text-muted-foreground">Clues only — no video · pure knowledge</span>
+            </div>
+            <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'hsl(280 67% 52% / 0.6)' }} />
           </div>
-        </div>
-      </button>
+        </button>
+      </div>
+
+      {/* Daily Quests */}
+      <DailyQuestsWidget />
 
       {/* Install banner — in flow, not fixed */}
       <div className="w-full max-w-sm mb-20">
