@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DifficultyTier, TIER_CONFIG } from '@/data/players';
-import { Volume2, VolumeX, Calendar, Check, Smartphone, Timer, Flame, ChevronRight, Bell, Lock, Pencil, X as XIcon } from 'lucide-react';
+import { Volume2, VolumeX, Calendar, Check, Smartphone, Timer, Flame, ChevronRight, Bell, Lock, Pencil, X as XIcon, Zap, Trophy } from 'lucide-react';
 import { InstallBanner } from '@/components/InstallBanner';
 import { isDailyChallengeCompleted, getDailyResult, getTimeUntilNextChallenge } from '@/utils/dailyChallenge';
 import { isHapticsEnabled, setHapticsEnabled, isWelcomeHapticsEnabled, setWelcomeHapticsEnabled } from '@/utils/haptics';
@@ -12,6 +12,7 @@ import { DailyQuestsWidget } from '@/components/DailyQuestsWidget';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { levelProgress } from '@/utils/levels';
 import { getNextAchievement } from '@/utils/achievements';
+import { ChallengeData } from '@/utils/challenge';
 
 interface Props {
   tier: DifficultyTier;
@@ -20,6 +21,9 @@ interface Props {
   startDailyChallenge: () => void;
   startBuzzerBeater: () => void;
   startMysteryMode: () => void;
+  startHeatCheckMode: () => void;
+  startChallengeGame?: (challenge: ChallengeData) => void;
+  pendingChallenge?: ChallengeData | null;
   highScores: Record<string, number>;
   xp: number;
   unlockedTiers: DifficultyTier[];
@@ -37,7 +41,7 @@ function getStoredName(): string {
   try { return localStorage.getItem('sg_player_name') || ''; } catch { return ''; }
 }
 
-export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, startBuzzerBeater, startMysteryMode, highScores, xp, unlockedTiers, isMuted, onToggleMute }: Props) {
+export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, startBuzzerBeater, startMysteryMode, startHeatCheckMode, startChallengeGame, pendingChallenge, highScores, xp, unlockedTiers, isMuted, onToggleMute }: Props) {
   const [hapticsOn, setHapticsOn] = useState(isHapticsEnabled);
   const [welcomeHapticsOn, setWelcomeHapticsOn] = useState(isWelcomeHapticsEnabled);
   const [playerName, setPlayerName] = useState(getStoredName);
@@ -255,6 +259,29 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
         </div>
       )}
 
+      {/* Pending challenge banner */}
+      {pendingChallenge && startChallengeGame && (
+        <div className="w-full max-w-sm mb-3 animate-scale-in">
+          <button
+            onClick={() => startChallengeGame(pendingChallenge)}
+            className="w-full rounded-2xl overflow-hidden border border-game-gold/40 relative transition-all press-scale active:scale-[0.97]"
+            style={{ background: 'linear-gradient(135deg, hsl(var(--game-gold) / 0.15) 0%, hsl(var(--game-gold) / 0.05) 100%)' }}
+          >
+            <div className="absolute top-0 left-0 right-0 h-[1.5px] animate-shimmer" style={{ background: 'linear-gradient(90deg, hsl(var(--game-gold)), transparent)' }} />
+            <div className="flex items-center gap-3.5 p-4">
+              <div className="w-11 h-11 rounded-xl bg-game-gold/20 flex items-center justify-center flex-shrink-0 text-xl">⚔️</div>
+              <div className="text-left flex-1">
+                <span className="font-display text-base tracking-wider block text-game-gold">CHALLENGE WAITING!</span>
+                <span className="text-[11px] text-muted-foreground">
+                  Beat <span className="text-foreground font-semibold">{pendingChallenge.name}</span>'s score of <span className="text-game-gold font-score font-bold">{pendingChallenge.score}</span>
+                </span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-game-gold/60 flex-shrink-0" />
+            </div>
+          </button>
+        </div>
+      )}
+
       {/* Tier Selector */}
       <div className="w-full max-w-sm mb-3">
         <p className="text-[10px] text-muted-foreground uppercase tracking-widest text-center mb-2">Select Difficulty</p>
@@ -424,6 +451,48 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
               <span className="text-[11px] text-muted-foreground">Clues only — no video · pure knowledge</span>
             </div>
             <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'hsl(280 67% 52% / 0.6)' }} />
+          </div>
+        </button>
+
+        {/* Heat Check Card */}
+        <button
+          onClick={startHeatCheckMode}
+          className="w-full rounded-2xl overflow-hidden relative transition-all press-scale active:scale-[0.97]"
+          style={{
+            background: 'linear-gradient(135deg, hsl(16 100% 58% / 0.15) 0%, hsl(0 100% 55% / 0.05) 100%)',
+            borderColor: 'hsl(16 100% 58% / 0.3)',
+            borderWidth: '1px',
+            borderStyle: 'solid',
+          }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-[1.5px] animate-buzzer-glow" style={{ background: 'linear-gradient(90deg, hsl(16 100% 58% / 0.9), hsl(0 100% 55% / 0.3), transparent)' }} />
+          <div className="flex items-center gap-3.5 p-4">
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 text-xl" style={{ background: 'hsl(16 100% 58% / 0.15)' }}>
+              🔥
+            </div>
+            <div className="text-left flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-display text-base tracking-wider text-foreground">HEAT CHECK</span>
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'hsl(16 100% 58% / 0.2)', color: 'hsl(16 100% 58%)' }}>NEW</span>
+              </div>
+              <span className="text-[11px] text-muted-foreground">Get hot · difficulty climbs · 5 heat levels</span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {(highScores['heatcheck'] ?? 0) > 0 && (
+                <div className="text-right">
+                  <span className="text-[9px] text-muted-foreground/60 block">best</span>
+                  <span className="text-[11px] text-game-gold font-score">🏆 {highScores['heatcheck']}</span>
+                </div>
+              )}
+              <ChevronRight className="w-4 h-4" style={{ color: 'hsl(16 100% 58% / 0.6)' }} />
+            </div>
+          </div>
+          {/* Heat level ladder preview */}
+          <div className="px-4 pb-3 -mt-1 flex items-center gap-1">
+            {['🥶', '🔥', '🔥🔥', '🔥🔥🔥', '👑'].map((emoji, i) => (
+              <span key={i} className="text-[10px] opacity-70">{emoji}</span>
+            ))}
+            <span className="text-[9px] text-muted-foreground/60 ml-1">Cold → Unstoppable</span>
           </div>
         </button>
       </div>

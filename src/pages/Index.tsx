@@ -1,4 +1,4 @@
-import { useState, useRef, lazy, Suspense } from 'react';
+import { useState, useRef, lazy, Suspense, useEffect } from 'react';
 import { useGameState } from '@/hooks/useGameState';
 import { useBackgroundMusic } from '@/hooks/useBackgroundMusic';
 import { HomeScreen } from '@/components/HomeScreen';
@@ -8,6 +8,7 @@ import { GameOverScreen } from '@/components/GameOverScreen';
 import { AchievementToast } from '@/components/AchievementToast';
 import { PageTransition } from '@/components/PageTransition';
 import { BottomNav, TabType } from '@/components/BottomNav';
+import { getChallengeFromURL, type ChallengeData } from '@/utils/challenge';
 
 const StatsScreen = lazy(() => import('@/components/StatsScreen').then(m => ({ default: m.StatsScreen })));
 const GalleryScreen = lazy(() => import('@/components/GalleryScreen').then(m => ({ default: m.GalleryScreen })));
@@ -20,8 +21,19 @@ const Index = () => {
   const game = useGameState();
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const prevTabRef = useRef<TabType>('home');
+  const [pendingChallenge, setPendingChallenge] = useState<ChallengeData | null>(null);
 
   useBackgroundMusic(game.isMuted);
+
+  // Parse challenge from URL on mount
+  useEffect(() => {
+    const challenge = getChallengeFromURL();
+    if (challenge) {
+      setPendingChallenge(challenge);
+      // Clean URL so refresh doesn't re-trigger
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   const handleTabChange = (tab: TabType) => {
     prevTabRef.current = activeTab;
@@ -90,6 +102,9 @@ const Index = () => {
               startDailyChallenge={game.startDailyChallenge}
               startBuzzerBeater={game.startBuzzerBeater}
               startMysteryMode={game.startMysteryMode}
+              startHeatCheckMode={game.startHeatCheckMode}
+              startChallengeGame={(c) => { game.startChallengeGame(c); setPendingChallenge(null); }}
+              pendingChallenge={pendingChallenge}
               highScores={game.highScores}
               xp={game.xp}
               unlockedTiers={game.unlockedTiers}
@@ -137,6 +152,8 @@ const Index = () => {
                   nextPlayerVideoFile={game.nextPlayerVideoFile}
                   isMysteryMode={game.isMysteryMode}
                   mysteryCluesRevealed={game.mysteryCluesRevealed}
+                  isHeatCheckMode={game.isHeatCheckMode}
+                  heatLevel={game.heatLevel}
                   onAnswer={game.submitAnswer}
                   onHint={game.useHint}
                   onHome={game.goHome}
@@ -182,6 +199,11 @@ const Index = () => {
                 answerHistory={game.answerHistory}
                 isDailyMode={game.isDailyMode}
                 isBuzzerMode={game.isBuzzerMode}
+                isHeatCheckMode={game.isHeatCheckMode}
+                isChallengeMode={game.isChallengeMode}
+                challengerScore={game.challengerScore}
+                challengerName={game.challengerName}
+                playerHistory={game.playerHistory}
                 leveledUp={game.leveledUp}
                 newLevel={game.newLevel}
                 onPlayAgain={game.startGame}

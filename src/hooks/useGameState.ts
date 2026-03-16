@@ -10,6 +10,15 @@ import { updateAchievementStats, checkNewAchievements, getAchievementStats, Achi
 import { xpToLevel } from '@/utils/levels';
 import { updateQuestProgress } from '@/utils/dailyQuests';
 import { recordMastery } from '@/utils/mastery';
+import { ChallengeData } from '@/utils/challenge';
+
+export const HEAT_LEVELS = [
+  { level: 0, name: 'COLD', tier: 'rookie' as DifficultyTier, timerSeconds: 15, color: '210 100% 65%', emoji: '🥶' },
+  { level: 1, name: 'WARMING UP', tier: 'pro' as DifficultyTier, timerSeconds: 12, color: '38 100% 60%', emoji: '🔥' },
+  { level: 2, name: 'HEAT CHECK', tier: 'allstar' as DifficultyTier, timerSeconds: 10, color: '16 100% 58%', emoji: '🔥🔥' },
+  { level: 3, name: 'ON FIRE', tier: 'mvp' as DifficultyTier, timerSeconds: 8, color: '0 100% 55%', emoji: '🔥🔥🔥' },
+  { level: 4, name: 'UNSTOPPABLE', tier: 'legend' as DifficultyTier, timerSeconds: 6, color: '280 80% 60%', emoji: '👑' },
+] as const;
 
 export type GamePhase = 'home' | 'playing' | 'reveal' | 'gameover';
 
@@ -50,6 +59,17 @@ interface GameState {
   newLevel: number;
   noHintCorrectThisGame: number;
   mysteryCompletedThisGame: boolean;
+  // Heat Check Mode
+  isHeatCheckMode: boolean;
+  heatLevel: number;
+  // Challenge Mode
+  isChallengeMode: boolean;
+  challengerScore: number;
+  challengerName: string;
+  challengePlayerIds: string[];
+  challengeRound: number;
+  // Player history for challenge sharing
+  playerHistory: string[];
 }
 
 const INITIAL_LIVES = 3;
@@ -122,6 +142,14 @@ export function useGameState() {
     newLevel: 1,
     noHintCorrectThisGame: 0,
     mysteryCompletedThisGame: false,
+    isHeatCheckMode: false,
+    heatLevel: 0,
+    isChallengeMode: false,
+    challengerScore: 0,
+    challengerName: '',
+    challengePlayerIds: [],
+    challengeRound: 0,
+    playerHistory: [],
   });
 
   const [xp, setXP] = useState(getStoredXP);
@@ -175,6 +203,23 @@ export function useGameState() {
     return { player, choices, usedIds: [...usedIds, player.id] };
   }, []);
 
+  const BASE_STATE_RESET = {
+    lives: INITIAL_LIVES, score: 0, streak: 0, bestStreak: 0,
+    hintsUsed: 0, hintsRevealed: [] as string[], totalAnswered: 0, totalCorrect: 0,
+    lastAnswerCorrect: null as null, selectedAnswer: null as null,
+    usedPlayerIds: [] as string[], hintsRemaining: TOTAL_HINTS, xpEarned: 0,
+    answerHistory: [] as Array<{ correct: boolean; hintsUsed: number }>,
+    isDailyMode: false, dailyPlayers: [] as Player[], dailyRound: 0,
+    timerPaused: true, isBuzzerMode: false, buzzerTimeLeft: BUZZER_START_TIME,
+    buzzerTimeDelta: null as null, activeSecondChance: false, eliminatedChoices: [] as string[],
+    gameHintsUsedTotal: 0, prevStreak: 0,
+    isMysteryMode: false, mysteryCluesRevealed: 0,
+    leveledUp: false, noHintCorrectThisGame: 0, mysteryCompletedThisGame: false,
+    isHeatCheckMode: false, heatLevel: 0,
+    isChallengeMode: false, challengerScore: 0, challengerName: '', challengePlayerIds: [] as string[], challengeRound: 0,
+    playerHistory: [] as string[],
+  };
+
   const startGame = useCallback((tier: DifficultyTier) => {
     clearTimer();
     clearBuzzerTimer();
@@ -183,17 +228,11 @@ export function useGameState() {
     const timerSeconds = TIER_CONFIG[tier].timerSeconds;
     refreshInventory();
     setState({
+      ...BASE_STATE_RESET,
       phase: 'playing', tier, currentPlayer: player, choices,
-      lives: INITIAL_LIVES, score: 0, streak: 0, bestStreak: 0,
-      hintsUsed: 0, hintsRevealed: [], totalAnswered: 0, totalCorrect: 0,
-      lastAnswerCorrect: null, selectedAnswer: null, timeLeft: timerSeconds,
-      usedPlayerIds: usedIds, hintsRemaining: TOTAL_HINTS, xpEarned: 0,
-      answerHistory: [], isDailyMode: false, dailyPlayers: [], dailyRound: 0,
-      timerPaused: true, isBuzzerMode: false, buzzerTimeLeft: BUZZER_START_TIME,
-      buzzerTimeDelta: null, activeSecondChance: false, eliminatedChoices: [],
-      gameHintsUsedTotal: 0, prevStreak: 0,
-      isMysteryMode: false, mysteryCluesRevealed: 0,
-      leveledUp: false, newLevel: xpToLevel(xp), noHintCorrectThisGame: 0, mysteryCompletedThisGame: false,
+      timeLeft: timerSeconds, usedPlayerIds: usedIds,
+      newLevel: xpToLevel(xp),
+      playerHistory: [player.id],
     });
   }, [clearTimer, clearBuzzerTimer, nextPlayer, refreshInventory, xp]);
 
@@ -204,17 +243,12 @@ export function useGameState() {
     const { player, choices, usedIds } = nextRandomPlayer([]);
     refreshInventory();
     setState({
+      ...BASE_STATE_RESET,
       phase: 'playing', tier: 'rookie', currentPlayer: player, choices,
-      lives: 99, score: 0, streak: 0, bestStreak: 0,
-      hintsUsed: 0, hintsRevealed: [], totalAnswered: 0, totalCorrect: 0,
-      lastAnswerCorrect: null, selectedAnswer: null, timeLeft: 999,
-      usedPlayerIds: usedIds, hintsRemaining: TOTAL_HINTS, xpEarned: 0,
-      answerHistory: [], isDailyMode: false, dailyPlayers: [], dailyRound: 0,
-      timerPaused: true, isBuzzerMode: true, buzzerTimeLeft: BUZZER_START_TIME,
-      buzzerTimeDelta: null, activeSecondChance: false, eliminatedChoices: [],
-      gameHintsUsedTotal: 0, prevStreak: 0,
-      isMysteryMode: false, mysteryCluesRevealed: 0,
-      leveledUp: false, newLevel: xpToLevel(xp), noHintCorrectThisGame: 0, mysteryCompletedThisGame: false,
+      timeLeft: 999, usedPlayerIds: usedIds,
+      newLevel: xpToLevel(xp),
+      lives: 99, isBuzzerMode: true, buzzerTimeLeft: BUZZER_START_TIME,
+      playerHistory: [player.id],
     });
   }, [clearTimer, clearBuzzerTimer, nextRandomPlayer, refreshInventory, xp]);
 
@@ -225,19 +259,56 @@ export function useGameState() {
     const { player, choices, usedIds } = nextRandomPlayer([]);
     refreshInventory();
     setState({
+      ...BASE_STATE_RESET,
       phase: 'playing', tier: 'allstar', currentPlayer: player, choices,
-      lives: INITIAL_LIVES, score: 0, streak: 0, bestStreak: 0,
-      hintsUsed: 0, hintsRevealed: [], totalAnswered: 0, totalCorrect: 0,
-      lastAnswerCorrect: null, selectedAnswer: null, timeLeft: 999,
-      usedPlayerIds: usedIds, hintsRemaining: TOTAL_HINTS, xpEarned: 0,
-      answerHistory: [], isDailyMode: false, dailyPlayers: [], dailyRound: 0,
-      timerPaused: false, isBuzzerMode: false, buzzerTimeLeft: BUZZER_START_TIME,
-      buzzerTimeDelta: null, activeSecondChance: false, eliminatedChoices: [],
-      gameHintsUsedTotal: 0, prevStreak: 0,
-      isMysteryMode: true, mysteryCluesRevealed: 0,
-      leveledUp: false, newLevel: xpToLevel(xp), noHintCorrectThisGame: 0, mysteryCompletedThisGame: false,
+      timeLeft: 999, usedPlayerIds: usedIds,
+      newLevel: xpToLevel(xp),
+      timerPaused: false, isMysteryMode: true,
+      playerHistory: [player.id],
     });
   }, [clearTimer, clearBuzzerTimer, nextRandomPlayer, refreshInventory, xp]);
+
+  const startHeatCheckMode = useCallback(() => {
+    clearTimer();
+    clearBuzzerTimer();
+    SFX.start();
+    const { player, choices, usedIds } = nextPlayer('rookie', []);
+    refreshInventory();
+    setState({
+      ...BASE_STATE_RESET,
+      phase: 'playing', tier: 'rookie', currentPlayer: player, choices,
+      timeLeft: 15, usedPlayerIds: usedIds,
+      newLevel: xpToLevel(xp),
+      isHeatCheckMode: true, heatLevel: 0,
+      playerHistory: [player.id],
+    });
+  }, [clearTimer, clearBuzzerTimer, nextPlayer, refreshInventory, xp]);
+
+  const startChallengeGame = useCallback((challenge: ChallengeData) => {
+    const challengePlayers = challenge.playerIds
+      .map(id => PLAYERS.find(p => p.id === id))
+      .filter((p): p is Player => !!p);
+    if (challengePlayers.length === 0) return;
+    clearTimer();
+    clearBuzzerTimer();
+    SFX.start();
+    const firstPlayer = challengePlayers[0];
+    const choices = generateChoices(firstPlayer, PLAYERS);
+    refreshInventory();
+    setState({
+      ...BASE_STATE_RESET,
+      phase: 'playing', tier: 'rookie', currentPlayer: firstPlayer, choices,
+      timeLeft: 15, usedPlayerIds: [firstPlayer.id],
+      newLevel: xpToLevel(xp),
+      isDailyMode: true, dailyPlayers: challengePlayers, dailyRound: 0,
+      lives: 99,
+      isChallengeMode: true,
+      challengerScore: challenge.score,
+      challengerName: challenge.name,
+      challengePlayerIds: challenge.playerIds,
+      playerHistory: [firstPlayer.id],
+    });
+  }, [clearTimer, clearBuzzerTimer, refreshInventory, xp]);
 
   const revealNextClue = useCallback(() => {
     setState(prev => {
@@ -256,17 +327,12 @@ export function useGameState() {
     const choices = getDailyChoices(firstPlayer);
     refreshInventory();
     setState({
+      ...BASE_STATE_RESET,
       phase: 'playing', tier: 'rookie', currentPlayer: firstPlayer, choices,
-      lives: 99, score: 0, streak: 0, bestStreak: 0,
-      hintsUsed: 0, hintsRevealed: [], totalAnswered: 0, totalCorrect: 0,
-      lastAnswerCorrect: null, selectedAnswer: null, timeLeft: 15,
-      usedPlayerIds: [firstPlayer.id], hintsRemaining: TOTAL_HINTS, xpEarned: 0,
-      answerHistory: [], isDailyMode: true, dailyPlayers, dailyRound: 0,
-      timerPaused: true, isBuzzerMode: false, buzzerTimeLeft: BUZZER_START_TIME,
-      buzzerTimeDelta: null, activeSecondChance: false, eliminatedChoices: [],
-      gameHintsUsedTotal: 0, prevStreak: 0,
-      isMysteryMode: false, mysteryCluesRevealed: 0,
-      leveledUp: false, newLevel: xpToLevel(xp), noHintCorrectThisGame: 0, mysteryCompletedThisGame: false,
+      timeLeft: 15, usedPlayerIds: [firstPlayer.id],
+      newLevel: xpToLevel(xp),
+      lives: 99, isDailyMode: true, dailyPlayers, dailyRound: 0,
+      playerHistory: [firstPlayer.id],
     });
   }, [clearTimer, clearBuzzerTimer, refreshInventory, xp]);
 
@@ -422,19 +488,27 @@ export function useGameState() {
       }
 
       const newLives = prev.isDailyMode ? prev.lives : (correct ? prev.lives : prev.lives - 1);
+      // Heat check: update heat level based on correct count
+      const newTotalCorrect = prev.totalCorrect + (correct ? 1 : 0);
+      const newHeatLevel = prev.isHeatCheckMode
+        ? Math.min(Math.floor(newTotalCorrect / 3), 4)
+        : prev.heatLevel;
+
       return {
         ...prev, phase: 'reveal' as GamePhase,
         lastAnswerCorrect: correct, selectedAnswer: playerId,
         score: prev.score + points, streak: newStreak,
         bestStreak: Math.max(prev.bestStreak, newStreak),
         totalAnswered: prev.totalAnswered + 1,
-        totalCorrect: prev.totalCorrect + (correct ? 1 : 0),
+        totalCorrect: newTotalCorrect,
         lives: newLives, xpEarned: prev.xpEarned + roundXP,
         answerHistory: [...prev.answerHistory, { correct, hintsUsed: prev.hintsRevealed.length }],
         buzzerTimeDelta: null,
         prevStreak: prev.streak,
         noHintCorrectThisGame: prev.noHintCorrectThisGame + (noHintCorrect ? 1 : 0),
-        mysteryCluesRevealed: 0, // reset for next round in mystery mode
+        mysteryCluesRevealed: 0,
+        heatLevel: newHeatLevel,
+        tier: prev.isHeatCheckMode ? HEAT_LEVELS[newHeatLevel].tier : prev.tier,
       };
     });
   }, [clearTimer, state.isBuzzerMode, refreshInventory]);
@@ -483,22 +557,24 @@ export function useGameState() {
         const nextRound = prev.dailyRound + 1;
         if (nextRound >= prev.dailyPlayers.length) {
           SFX.gameOver();
-          const result = {
-            score: prev.score,
-            answers: prev.answerHistory.map(a => a.correct),
-            answerDetails: prev.answerHistory,
-            players: prev.dailyPlayers.map(p => p.name),
-            date: getDailySeed(),
-          };
-          saveDailyResult(result);
+          if (!prev.isChallengeMode) {
+            const result = {
+              score: prev.score,
+              answers: prev.answerHistory.map(a => a.correct),
+              answerDetails: prev.answerHistory,
+              players: prev.dailyPlayers.map(p => p.name),
+              date: getDailySeed(),
+            };
+            saveDailyResult(result);
+          }
           const newXP = xp + prev.xpEarned;
           const prevLevel = xpToLevel(xp);
           const newLevel = xpToLevel(newXP);
           setXP(newXP);
           localStorage.setItem('sg_xp', String(newXP));
 
-          // Save daily mode to history
-          const entry = { score: prev.score, tier: 'daily', date: new Date().toISOString(), streak: prev.bestStreak, answerHistory: prev.answerHistory };
+          // Save daily/challenge mode to history
+          const entry = { score: prev.score, tier: prev.isChallengeMode ? 'challenge' : 'daily', date: new Date().toISOString(), streak: prev.bestStreak, answerHistory: prev.answerHistory };
           const newHistory = [entry, ...scoreHistory].slice(0, 50);
           setScoreHistory(newHistory);
           localStorage.setItem('sg_history', JSON.stringify(newHistory));
@@ -545,14 +621,18 @@ export function useGameState() {
       }
 
       const { player, choices, usedIds } = nextPlayer(prev.tier, prev.usedPlayerIds);
+      const nextTimeLeft = prev.isHeatCheckMode
+        ? HEAT_LEVELS[prev.heatLevel].timerSeconds
+        : TIER_CONFIG[prev.tier].timerSeconds;
       return {
         ...prev, phase: 'playing' as GamePhase,
         currentPlayer: player, choices,
         lastAnswerCorrect: null, selectedAnswer: null,
-        hintsRevealed: [], timeLeft: TIER_CONFIG[prev.tier].timerSeconds,
+        hintsRevealed: [], timeLeft: nextTimeLeft,
         usedPlayerIds: usedIds, timerPaused: true,
         eliminatedChoices: [], activeSecondChance: false,
         mysteryCluesRevealed: 0,
+        playerHistory: [...prev.playerHistory, player.id],
       };
     });
   }, [xp, highScores, scoreHistory, nextPlayer]);
@@ -662,21 +742,22 @@ export function useGameState() {
         setNewAchievements(newlyUnlocked);
       }
 
-      if (state.isBuzzerMode) {
+      if (state.isBuzzerMode || state.isHeatCheckMode) {
         const newXP = xp + state.xpEarned;
         const prevLevel = xpToLevel(xp);
         const newLevel = xpToLevel(newXP);
         setXP(newXP);
         localStorage.setItem('sg_xp', String(newXP));
 
-        const buzzerHS = highScores['buzzer'] || 0;
-        if (state.score > buzzerHS) {
-          const newHS = { ...highScores, buzzer: state.score };
+        const modeKey = state.isBuzzerMode ? 'buzzer' : 'heatcheck';
+        const modeHS = highScores[modeKey] || 0;
+        if (state.score > modeHS) {
+          const newHS = { ...highScores, [modeKey]: state.score };
           setHighScores(newHS);
           localStorage.setItem('sg_highscores', JSON.stringify(newHS));
         }
 
-        const entry = { score: state.score, tier: 'buzzer', date: new Date().toISOString(), streak: state.bestStreak, answerHistory: state.answerHistory };
+        const entry = { score: state.score, tier: modeKey, date: new Date().toISOString(), streak: state.bestStreak, answerHistory: state.answerHistory };
         const newHistory = [entry, ...scoreHistory].slice(0, 50);
         setScoreHistory(newHistory);
         localStorage.setItem('sg_history', JSON.stringify(newHistory));
@@ -735,6 +816,8 @@ export function useGameState() {
     startBuzzerBeater,
     startDailyChallenge,
     startMysteryMode,
+    startHeatCheckMode,
+    startChallengeGame,
     revealNextClue,
     setVideoReady,
     submitAnswer,

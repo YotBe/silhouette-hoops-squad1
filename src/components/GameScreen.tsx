@@ -5,6 +5,18 @@ import { MysteryClueCard } from './MysteryClueCard';
 import { PowerUpBar } from './PowerUpBar';
 import { Flame, Volume2, VolumeX, Timer, X, Shirt, Lock, Check } from 'lucide-react';
 import { PowerUpType, PowerUpInventory } from '@/utils/powerups';
+import { HEAT_LEVELS } from '@/hooks/useGameState';
+
+const CORRECT_HYPE = [
+  'BUCKETS!', 'TOO EASY!', 'LOCK IN!', 'HE COOKS!', 'GOATED!',
+  'NO LOOK!', 'AUTOMATIC!', 'ICE COLD!', 'SPLASH!', 'CAUGHT 4K!',
+  'NEXT!', 'NOT EVEN CLOSE!', 'EASY MONEY!', 'TORCH!', 'CHEF KISS!',
+];
+const WRONG_HYPE = [
+  'BRICKED!', 'CAUGHT LACKIN!', 'DO YOUR RESEARCH!',
+  'WHO IS THAT?!', 'GET COOKED!', 'YIKES!', 'EMBARRASSING!',
+  'TOUCHED GRASS?', 'NOT EVEN CLOSE!', 'HOMEWORK TIME!',
+];
 
 interface Props {
   currentPlayer: Player;
@@ -27,6 +39,8 @@ interface Props {
   nextPlayerVideoFile?: string | null;
   isMysteryMode?: boolean;
   mysteryCluesRevealed?: number;
+  isHeatCheckMode?: boolean;
+  heatLevel?: number;
   onAnswer: (playerId: string) => void;
   onHint: () => void;
   onHome: () => void;
@@ -62,6 +76,7 @@ export function GameScreen({
   powerUpInventory, activeSecondChance, eliminatedChoices,
   nextPlayerVideoFile,
   isMysteryMode = false, mysteryCluesRevealed = 0,
+  isHeatCheckMode = false, heatLevel = 0,
   onAnswer, onHint, onHome, onToggleMute, onVideoReady, onUsePowerUp, onRevealClue
 }: Props) {
   const config = TIER_CONFIG[tier];
@@ -76,8 +91,14 @@ export function GameScreen({
   const [answeredId, setAnsweredId] = useState<string | null>(null);
   const [flashRed, setFlashRed] = useState(false);
   const [showMultiplierBanner, setShowMultiplierBanner] = useState(false);
+  const [hypeText, setHypeText] = useState<string | null>(null);
+  const [heatLevelUp, setHeatLevelUp] = useState(false);
   const prevStreakRef = useRef(streak);
+  const prevHeatLevelRef = useRef(heatLevel);
   const multiplier = getMultiplierDisplay(streak);
+
+  // Streak intensity for visual escalation
+  const streakIntensity = streak >= 10 ? 'goated' : streak >= 7 ? 'inferno' : streak >= 5 ? 'fire' : streak >= 3 ? 'warm' : 'none';
 
   // Show multiplier banner when streak crosses 3, 6, 9...
   useEffect(() => {
@@ -89,6 +110,17 @@ export function GameScreen({
       return () => clearTimeout(t);
     }
   }, [streak]);
+
+  // Heat level up animation
+  useEffect(() => {
+    const prev = prevHeatLevelRef.current;
+    prevHeatLevelRef.current = heatLevel;
+    if (heatLevel > prev) {
+      setHeatLevelUp(true);
+      const t = setTimeout(() => setHeatLevelUp(false), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [heatLevel]);
 
   // SVG ring calculations
   const ringRadius = 18;
@@ -129,6 +161,10 @@ export function GameScreen({
     const isCorrect = playerId === currentPlayer.id;
     setFeedbackState(isCorrect ? 'correct' : 'wrong');
     setAnsweredId(playerId);
+    // Hype text
+    const pool = isCorrect ? CORRECT_HYPE : WRONG_HYPE;
+    setHypeText(pool[Math.floor(Math.random() * pool.length)]);
+    setTimeout(() => setHypeText(null), isBuzzerMode ? 500 : 900);
     if (isCorrect) {
       const streakMultiplier = Math.min(1 + Math.floor(streak / 3) * 0.5, 3);
       const hintPenalty = hintsRevealed.length * 20;
@@ -189,11 +225,25 @@ export function GameScreen({
   }, [hintsRemaining, hintsRevealed, handleHint]);
 
   // Mode label for HUD
+  const heatConfig = HEAT_LEVELS[heatLevel] ?? HEAT_LEVELS[0];
   const modeLabel = isBuzzerMode
     ? { text: '🚨 BUZZER', className: 'text-game-wrong bg-game-wrong/15' }
     : isDailyMode
     ? { text: '📅 DAILY', className: 'text-primary bg-primary/15' }
+    : isHeatCheckMode
+    ? { text: `${heatConfig.emoji} ${heatConfig.name}`, className: '', style: { color: `hsl(${heatConfig.color})`, backgroundColor: `hsl(${heatConfig.color} / 0.15)` } }
     : { text: config.label.toUpperCase(), className: '', style: { color: `hsl(${config.color})`, backgroundColor: `hsl(${config.color} / 0.15)` } };
+
+  // Streak background glow colors
+  const streakBgGlow = streakIntensity === 'goated'
+    ? 'radial-gradient(ellipse at 50% 40%, hsl(280 80% 60% / 0.25) 0%, hsl(0 100% 55% / 0.15) 50%, transparent 80%)'
+    : streakIntensity === 'inferno'
+    ? 'radial-gradient(ellipse at 50% 40%, hsl(0 100% 55% / 0.22) 0%, hsl(16 100% 58% / 0.1) 60%, transparent 80%)'
+    : streakIntensity === 'fire'
+    ? 'radial-gradient(ellipse at 50% 40%, hsl(16 100% 58% / 0.18) 0%, transparent 70%)'
+    : streakIntensity === 'warm'
+    ? 'radial-gradient(ellipse at 50% 40%, hsl(38 100% 60% / 0.12) 0%, transparent 70%)'
+    : null;
 
   return (
     <div className={`flex flex-col h-screen-safe bg-background relative overflow-hidden ${
@@ -204,6 +254,17 @@ export function GameScreen({
         <div className="absolute inset-0 z-[60] pointer-events-none bg-game-wrong/30 animate-flash-red" />
       )}
 
+      {/* Hype text on answer */}
+      {hypeText && (
+        <div className="absolute inset-x-0 top-1/3 z-[58] flex items-center justify-center pointer-events-none">
+          <span className={`font-display text-3xl tracking-widest animate-hype-burst drop-shadow-[0_0_20px_rgba(0,0,0,0.8)] ${
+            feedbackState === 'correct' ? 'text-game-correct' : 'text-game-wrong'
+          }`} style={{ textShadow: feedbackState === 'correct' ? '0 0 30px hsl(var(--game-correct)/0.8)' : '0 0 30px hsl(var(--game-wrong)/0.8)' }}>
+            {hypeText}
+          </span>
+        </div>
+      )}
+
       {/* Multiplier banner */}
       {showMultiplierBanner && multiplier && (
         <div className="absolute inset-x-0 top-20 z-[55] flex items-center justify-center pointer-events-none">
@@ -211,6 +272,18 @@ export function GameScreen({
             style={{ background: 'hsl(var(--game-gold) / 0.15)' }}>
             <span className={`font-display text-2xl tracking-widest ${multiplier.color}`}>
               {multiplier.text} MULTIPLIER!
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Heat level up banner */}
+      {heatLevelUp && isHeatCheckMode && (
+        <div className="absolute inset-x-0 top-24 z-[55] flex items-center justify-center pointer-events-none">
+          <div className="animate-multiplier-announce px-6 py-2.5 rounded-2xl border"
+            style={{ background: `hsl(${heatConfig.color} / 0.2)`, borderColor: `hsl(${heatConfig.color} / 0.5)` }}>
+            <span className="font-display text-xl tracking-widest" style={{ color: `hsl(${heatConfig.color})` }}>
+              {heatConfig.emoji} {heatConfig.name}!
             </span>
           </div>
         </div>
@@ -257,6 +330,13 @@ export function GameScreen({
           background: `radial-gradient(ellipse at 50% 40%, hsl(${currentPlayer.teamColor} / 0.12) 0%, transparent 70%)`,
         }}
       />
+      {/* Streak intensity glow overlay */}
+      {streakBgGlow && (
+        <div
+          className="absolute inset-0 z-0 pointer-events-none transition-all duration-700"
+          style={{ background: streakBgGlow, animation: streakIntensity === 'goated' || streakIntensity === 'inferno' ? 'bg-pulse 2s ease-in-out infinite' : undefined }}
+        />
+      )}
 
       <div className="flex flex-col flex-1 px-3 pt-2 pb-[env(safe-area-inset-bottom,4px)] animate-slide-up min-h-0 relative z-10 justify-between gap-1">
         {/* Glass HUD Bar */}

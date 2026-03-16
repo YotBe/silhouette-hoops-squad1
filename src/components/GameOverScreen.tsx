@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { TIER_CONFIG, DifficultyTier } from '@/data/players';
-import { Trophy, Target, Flame, RotateCcw, Home, Zap, Share2, Calendar, Timer, ArrowUp, Copy } from 'lucide-react';
+import { Trophy, Target, Flame, RotateCcw, Home, Zap, Share2, Calendar, Timer, ArrowUp, Copy, Swords } from 'lucide-react';
 import { fireConfetti } from '@/utils/confetti';
 import { toast } from '@/hooks/use-toast';
 import { getDailyResult, getDailyShareText, getDailyChallengeNumber } from '@/utils/dailyChallenge';
+import { buildChallengeURL } from '@/utils/challenge';
 
 interface AnswerEntry {
   correct: boolean;
@@ -21,6 +22,11 @@ interface Props {
   answerHistory: AnswerEntry[];
   isDailyMode: boolean;
   isBuzzerMode?: boolean;
+  isHeatCheckMode?: boolean;
+  isChallengeMode?: boolean;
+  challengerScore?: number;
+  challengerName?: string;
+  playerHistory?: string[];
   leveledUp?: boolean;
   newLevel?: number;
   onPlayAgain: (tier: DifficultyTier) => void;
@@ -40,31 +46,59 @@ function getEmojiForAnswer(entry: AnswerEntry): string {
   return entry.hintsUsed > 0 ? '🟡' : '🟢';
 }
 
-export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered, tier, highScores, xpEarned, answerHistory, isDailyMode, isBuzzerMode = false, leveledUp = false, newLevel = 1, onPlayAgain, onHome }: Props) {
+export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered, tier, highScores, xpEarned, answerHistory, isDailyMode, isBuzzerMode = false, isHeatCheckMode = false, isChallengeMode = false, challengerScore = 0, challengerName = '', playerHistory = [], leveledUp = false, newLevel = 1, onPlayAgain, onHome }: Props) {
   const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
-  const isNewHighScore = !isDailyMode && !isBuzzerMode && score >= (highScores[tier] || 0) && score > 0;
+  const isNewHighScore = !isDailyMode && !isBuzzerMode && !isHeatCheckMode && score >= (highScores[tier] || 0) && score > 0;
   const isBuzzerNewHS = isBuzzerMode && score >= (highScores['buzzer'] || 0) && score > 0;
+  const isHeatNewHS = isHeatCheckMode && score >= (highScores['heatcheck'] || 0) && score > 0;
   const isPerfect = totalAnswered > 0 && totalCorrect === totalAnswered;
   const config = TIER_CONFIG[tier];
-  const nextTier = !isDailyMode && !isBuzzerMode ? getNextTier(tier) : null;
+  const nextTier = !isDailyMode && !isBuzzerMode && !isHeatCheckMode ? getNextTier(tier) : null;
   const xp = parseInt(localStorage.getItem('sg_xp') || '0', 10);
   const nextTierUnlocked = nextTier ? xp >= TIER_CONFIG[nextTier].xpRequired : false;
   const challengeNumber = getDailyChallengeNumber();
   const emojiGrid = answerHistory.map(getEmojiForAnswer).join('');
   const streakMaintained = bestStreak >= 2;
+  const playerName = localStorage.getItem('sg_player_name') || 'Anonymous';
+  const challengeWon = isChallengeMode && score > challengerScore;
+  const challengeTied = isChallengeMode && score === challengerScore;
 
   useEffect(() => {
-    if (isNewHighScore || isBuzzerNewHS || isPerfect) setTimeout(() => fireConfetti(), 300);
-  }, [isNewHighScore, isBuzzerNewHS, isPerfect]);
+    if (isNewHighScore || isBuzzerNewHS || isHeatNewHS || isPerfect || (isChallengeMode && challengeWon)) {
+      setTimeout(() => fireConfetti(), 300);
+    }
+  }, [isNewHighScore, isBuzzerNewHS, isHeatNewHS, isPerfect, isChallengeMode, challengeWon]);
 
   const getShareText = (): string => {
+    if (isChallengeMode) {
+      const result = challengeWon ? 'WON' : challengeTied ? 'TIED' : 'LOST';
+      return `⚔️ WHO IS IT? CHALLENGE ${result}!\n${emojiGrid}\nMy score: ${score} | ${challengerName}: ${challengerScore}\nwhoisit.app`;
+    }
     if (isDailyMode) {
       return `WHO IS IT? 🏀 Day #${challengeNumber}\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\nwhoisit.app`;
     }
     if (isBuzzerMode) {
       return `🚨 WHO IS IT? Buzzer Beater!\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\nwhoisit.app`;
     }
+    if (isHeatCheckMode) {
+      return `🔥 WHO IS IT? Heat Check!\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\nwhoisit.app`;
+    }
     return `🏀 WHO IS IT? — ${config.label}\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\nwhoisit.app`;
+  };
+
+  const handleChallengeFriend = async () => {
+    if (playerHistory.length === 0) return;
+    const url = buildChallengeURL({ playerIds: playerHistory, score, name: playerName, tier });
+    const text = `⚔️ Beat my WHO IS IT? score of ${score}!\n${url}`;
+    if (navigator.share) {
+      try { await navigator.share({ text, url }); return; } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: 'Challenge link copied!', description: `Share it and dare your friends to beat ${score} pts` });
+    } catch {
+      toast({ title: 'Challenge link', description: url });
+    }
   };
 
   const handleCopy = async () => {
@@ -86,7 +120,7 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
     }
   };
 
-  const headerText = isDailyMode || isBuzzerMode ? 'SESSION COMPLETE' : 'GAME OVER';
+  const headerText = isDailyMode || isBuzzerMode || isHeatCheckMode ? 'SESSION COMPLETE' : 'GAME OVER';
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
@@ -100,11 +134,25 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
           </p>
         </div>
       )}
-      {(isNewHighScore || isBuzzerNewHS) && (
+      {(isNewHighScore || isBuzzerNewHS || isHeatNewHS) && (
         <div className="text-center mb-4 animate-slam-down">
           <span className="text-4xl">🎉</span>
           <p className="text-game-gold font-display text-2xl tracking-wider mt-1 drop-shadow-[0_0_20px_hsl(var(--game-gold)/0.5)] animate-pulse">
             NEW RECORD!
+          </p>
+        </div>
+      )}
+
+      {/* Challenge result banner */}
+      {isChallengeMode && (
+        <div className={`text-center mb-4 animate-slam-down`}>
+          <p className={`font-display text-3xl tracking-wider drop-shadow-[0_0_20px_rgba(0,0,0,0.5)] ${
+            challengeWon ? 'text-game-correct' : challengeTied ? 'text-game-gold' : 'text-game-wrong'
+          }`}>
+            {challengeWon ? '⚔️ YOU WIN!' : challengeTied ? '🤝 TIE GAME!' : '💀 YOU LOSE!'}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            You: <span className="text-foreground font-score font-bold">{score}</span> · {challengerName}: <span className="font-score font-bold" style={{ color: challengeWon ? 'hsl(var(--game-wrong))' : 'hsl(var(--game-correct))' }}>{challengerScore}</span>
           </p>
         </div>
       )}
@@ -119,13 +167,25 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
           <span className="text-sm font-display text-muted-foreground tracking-wider">BUZZER BEATER</span>
         </div>
       )}
-      {isDailyMode && (
+      {isHeatCheckMode && (
+        <div className="flex items-center gap-2 mb-2 animate-slide-up">
+          <span className="text-xl">🔥</span>
+          <span className="text-sm font-display tracking-wider" style={{ color: 'hsl(16 100% 58%)' }}>HEAT CHECK</span>
+        </div>
+      )}
+      {isChallengeMode && (
+        <div className="flex items-center gap-2 mb-2 animate-slide-up">
+          <Swords className="w-5 h-5 text-game-gold" />
+          <span className="text-sm font-display text-muted-foreground tracking-wider">CHALLENGE vs {challengerName}</span>
+        </div>
+      )}
+      {isDailyMode && !isChallengeMode && (
         <div className="flex items-center gap-2 mb-2 animate-slide-up">
           <Calendar className="w-5 h-5 text-primary" />
           <span className="text-sm font-display text-muted-foreground tracking-wider">DAILY CHALLENGE #{challengeNumber}</span>
         </div>
       )}
-      {!isDailyMode && !isBuzzerMode && (
+      {!isDailyMode && !isBuzzerMode && !isHeatCheckMode && (
         <div className="text-[10px] font-bold uppercase tracking-wider mb-4 px-3 py-1 rounded-full"
           style={{ color: `hsl(${config.color})`, backgroundColor: `hsl(${config.color} / 0.15)` }}>
           {config.label}
@@ -209,10 +269,25 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
           </button>
         </div>
 
-        {!isDailyMode && (
-          <button onClick={() => isBuzzerMode ? window.location.reload() : onPlayAgain(tier)}
+        {/* Challenge a Friend */}
+        {!isChallengeMode && playerHistory.length > 0 && (
+          <button onClick={handleChallengeFriend}
+            className="w-full py-4 rounded-2xl border font-display tracking-widest press-scale flex items-center justify-center gap-2 text-sm"
+            style={{ borderColor: 'hsl(var(--game-gold) / 0.4)', color: 'hsl(var(--game-gold))', background: 'hsl(var(--game-gold) / 0.08)' }}>
+            <Swords className="w-4 h-4" /> CHALLENGE A FRIEND
+          </button>
+        )}
+
+        {!isDailyMode && !isChallengeMode && (
+          <button onClick={() => isHeatCheckMode || isBuzzerMode ? window.location.reload() : onPlayAgain(tier)}
             className="w-full py-4 rounded-2xl glass border border-[rgba(255,255,255,0.1)] font-display tracking-widest press-scale flex items-center justify-center gap-2 text-foreground">
             <RotateCcw className="w-4 h-4" /> PLAY AGAIN
+          </button>
+        )}
+        {isChallengeMode && (
+          <button onClick={() => onPlayAgain(tier)}
+            className="w-full py-4 rounded-2xl glass border border-[rgba(255,255,255,0.1)] font-display tracking-widest press-scale flex items-center justify-center gap-2 text-foreground">
+            <RotateCcw className="w-4 h-4" /> REMATCH
           </button>
         )}
         {nextTier && nextTierUnlocked && (
