@@ -13,9 +13,14 @@ const queryClient = new QueryClient();
 
 const App = () => {
   useEffect(() => {
-    const goOffline = () => toast.warning("You're offline — reconnect to play today's challenge.");
+    const goOffline = () => toast.info("You're offline — game works locally, leaderboard & duels need Wi-Fi.");
+    const goOnline  = () => toast.success("Back online 🏀");
     window.addEventListener('offline', goOffline);
-    return () => window.removeEventListener('offline', goOffline);
+    window.addEventListener('online',  goOnline);
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online',  goOnline);
+    };
   }, []);
 
   // Welcome vibration — fires on every fresh app open (sessionStorage clears when PWA is closed)
