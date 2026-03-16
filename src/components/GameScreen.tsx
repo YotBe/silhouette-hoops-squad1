@@ -41,6 +41,8 @@ interface Props {
   mysteryCluesRevealed?: number;
   isHeatCheckMode?: boolean;
   heatLevel?: number;
+  aiClues?: string[];
+  aiClueLoading?: boolean;
   onAnswer: (playerId: string) => void;
   onHint: () => void;
   onHome: () => void;
@@ -77,6 +79,7 @@ export function GameScreen({
   nextPlayerVideoFile,
   isMysteryMode = false, mysteryCluesRevealed = 0,
   isHeatCheckMode = false, heatLevel = 0,
+  aiClues = [], aiClueLoading = false,
   onAnswer, onHint, onHome, onToggleMute, onVideoReady, onUsePowerUp, onRevealClue
 }: Props) {
   const config = TIER_CONFIG[tier];
@@ -511,6 +514,24 @@ export function GameScreen({
             );
           })}
         </div>
+
+        {/* AI Clues */}
+        {(aiClues.length > 0 || aiClueLoading) && (
+          <div className="w-full max-w-sm space-y-1.5 mt-1 animate-fade-in">
+            {aiClues.map((clue, i) => (
+              <div key={i} className="flex items-start gap-2 px-3 py-2 rounded-xl glass border border-primary/20 animate-slide-up">
+                <span className="text-primary text-xs mt-0.5">✨</span>
+                <span className="text-sm text-foreground/90 leading-snug">{clue}</span>
+              </div>
+            ))}
+            {aiClueLoading && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl glass border border-primary/10">
+                <span className="text-primary text-xs animate-pulse">✨</span>
+                <span className="text-xs text-muted-foreground italic">Generating clue...</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Answer Grid — hidden until video ready, glass cards with feedback */}
         <div className={`grid grid-cols-2 gap-2 flex-shrink-0 transition-all duration-300 ${

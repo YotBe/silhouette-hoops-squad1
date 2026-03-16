@@ -182,6 +182,8 @@ const Index = () => {
                   mysteryCluesRevealed={game.mysteryCluesRevealed}
                   isHeatCheckMode={game.isHeatCheckMode}
                   heatLevel={game.heatLevel}
+                  aiClues={game.aiClues ?? []}
+                  aiClueLoading={game.aiClueLoading ?? false}
                   onAnswer={game.submitAnswer}
                   onHint={game.useHint}
                   onHome={game.goHome}

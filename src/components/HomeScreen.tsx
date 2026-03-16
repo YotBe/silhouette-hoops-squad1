@@ -23,6 +23,7 @@ interface Props {
   startMysteryMode: () => void;
   startHeatCheckMode: () => void;
   startDuelMode?: () => void;
+  startPartyMode?: () => void;
   startChallengeGame?: (challenge: ChallengeData) => void;
   pendingChallenge?: ChallengeData | null;
   highScores: Record<string, number>;
@@ -42,7 +43,7 @@ function getStoredName(): string {
   try { return localStorage.getItem('sg_player_name') || ''; } catch { return ''; }
 }
 
-export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, startBuzzerBeater, startMysteryMode, startHeatCheckMode, startDuelMode, startChallengeGame, pendingChallenge, highScores, xp, unlockedTiers, isMuted, onToggleMute }: Props) {
+export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, startBuzzerBeater, startMysteryMode, startHeatCheckMode, startDuelMode, startPartyMode, startChallengeGame, pendingChallenge, highScores, xp, unlockedTiers, isMuted, onToggleMute }: Props) {
   const [hapticsOn, setHapticsOn] = useState(isHapticsEnabled);
   const [welcomeHapticsOn, setWelcomeHapticsOn] = useState(isWelcomeHapticsEnabled);
   const [playerName, setPlayerName] = useState(getStoredName);

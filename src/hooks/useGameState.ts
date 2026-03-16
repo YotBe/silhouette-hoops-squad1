@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Player, DifficultyTier, PLAYERS, TIER_CONFIG, getPlayersByTier, generateChoices, getPlayerEra } from '@/data/players';
+import { generateAIClue } from '@/utils/aiClues';
 import { SFX, setSFXMuted } from './useSoundEffects';
 import { getDailyPlayers, getDailyChoices, isDailyChallengeCompleted, saveDailyResult, getDailyShareText, getDailySeed } from '@/utils/dailyChallenge';
 import { hapticSuccess, hapticError, hapticLight, hapticCountdown } from '@/utils/haptics';
@@ -70,6 +71,9 @@ interface GameState {
   challengeRound: number;
   // Player history for challenge sharing
   playerHistory: string[];
+  // AI clues
+  aiClues: string[];
+  aiClueLoading: boolean;
   // Live Duel Mode
   isDuelMode: boolean;
   duelRoomId: string;
@@ -155,6 +159,8 @@ export function useGameState() {
     challengePlayerIds: [],
     challengeRound: 0,
     playerHistory: [],
+    aiClues: [],
+    aiClueLoading: false,
     isDuelMode: false,
     duelRoomId: '',
     duelRole: null,
@@ -227,6 +233,7 @@ export function useGameState() {
     isHeatCheckMode: false, heatLevel: 0,
     isChallengeMode: false, challengerScore: 0, challengerName: '', challengePlayerIds: [] as string[], challengeRound: 0,
     playerHistory: [] as string[],
+    aiClues: [] as string[], aiClueLoading: false,
     isDuelMode: false, duelRoomId: '', duelRole: null as null, duelOpponentName: '',
   };
 
@@ -522,6 +529,7 @@ export function useGameState() {
           hintsRevealed: [], hintsRemaining: TOTAL_HINTS,
           selectedAnswer: null, lastAnswerCorrect: correct,
           eliminatedChoices: [], activeSecondChance: false,
+          aiClues: [], aiClueLoading: false,
         };
       }
 
@@ -627,7 +635,7 @@ export function useGameState() {
           lastAnswerCorrect: null, selectedAnswer: null,
           hintsRevealed: [], timeLeft: 15, dailyRound: nextRound,
           timerPaused: true, eliminatedChoices: [], activeSecondChance: false,
-          
+          aiClues: [], aiClueLoading: false,
         };
       }
 
@@ -670,12 +678,20 @@ export function useGameState() {
         usedPlayerIds: usedIds, timerPaused: true,
         eliminatedChoices: [], activeSecondChance: false,
         mysteryCluesRevealed: 0,
+        aiClues: [], aiClueLoading: false,
         playerHistory: [...prev.playerHistory, player.id],
       };
     });
   }, [xp, highScores, scoreHistory, nextPlayer]);
 
   const useHint = useCallback(() => {
+    const apiKey = import.meta.env.VITE_CLAUDE_API_KEY as string | undefined;
+    const apiKeyAvailable = !!apiKey;
+
+    let currentPlayerSnapshot: Player | null = null;
+    let alreadyShownClueTexts: string[] = [];
+    let hintNumber = 1;
+
     setState(prev => {
       if (prev.hintsRemaining <= 0 || !prev.currentPlayer) return prev;
       SFX.hint();
@@ -683,6 +699,22 @@ export function useGameState() {
       const hintOrder = ['position', 'number', 'team'];
       const nextHint = hintOrder.find(h => !prev.hintsRevealed.includes(h));
       if (!nextHint) return prev;
+
+      // Capture data for AI clue generation outside of setState
+      currentPlayerSnapshot = prev.currentPlayer;
+      hintNumber = prev.hintsRevealed.length + 1;
+      // Build the already-shown clue texts from the static hint values
+      const hintTypes = [
+        { key: 'position', value: prev.currentPlayer.position },
+        { key: 'number', value: `#${prev.currentPlayer.number}` },
+        { key: 'team', value: prev.currentPlayer.team },
+      ];
+      alreadyShownClueTexts = prev.hintsRevealed
+        .map(k => hintTypes.find(h => h.key === k)?.value ?? '')
+        .filter(Boolean);
+      // Also include already-generated AI clues
+      alreadyShownClueTexts = [...alreadyShownClueTexts, ...prev.aiClues];
+
       return {
         ...prev,
         hintsRevealed: [...prev.hintsRevealed, nextHint],
@@ -691,6 +723,24 @@ export function useGameState() {
         gameHintsUsedTotal: prev.gameHintsUsedTotal + 1,
       };
     });
+
+    // Generate AI clue asynchronously after state update
+    if (apiKeyAvailable) {
+      // We need to wait a tick so currentPlayerSnapshot is populated
+      setTimeout(() => {
+        if (!currentPlayerSnapshot) return;
+        setState(prev => ({ ...prev, aiClueLoading: true }));
+        generateAIClue(currentPlayerSnapshot!, alreadyShownClueTexts, hintNumber)
+          .then(clue => {
+            if (clue) {
+              setState(prev => ({ ...prev, aiClues: [...prev.aiClues, clue], aiClueLoading: false }));
+            } else {
+              setState(prev => ({ ...prev, aiClueLoading: false }));
+            }
+          })
+          .catch(() => setState(prev => ({ ...prev, aiClueLoading: false })));
+      }, 0);
+    }
   }, []);
 
   const goHome = useCallback(() => {
@@ -866,5 +916,7 @@ export function useGameState() {
     setTier,
     handleUsePowerUp,
     clearNewAchievements,
+    aiClues: state.aiClues,
+    aiClueLoading: state.aiClueLoading,
   };
 }
