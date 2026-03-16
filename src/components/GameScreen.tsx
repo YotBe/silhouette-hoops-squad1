@@ -72,17 +72,6 @@ export function GameScreen({
   const [flashRed, setFlashRed] = useState(false);
   const multiplier = getMultiplierDisplay(streak);
 
-  // Progressive reveal: 0 = full silhouette, 1 = fully revealed
-  // During play: starts at 0, gradually reveals as time runs out (max 70% in-game)
-  // On answer: jumps to 1 for dramatic reveal animation
-  const revealProgress = answeredId !== null
-    ? 1
-    : isBuzzerMode
-    ? 0.35
-    : imageReady
-    ? (1 - timeLeft / maxTime) * 0.7
-    : 0;
-
   // SVG ring calculations
   const ringRadius = 18;
   const ringCircumference = 2 * Math.PI * ringRadius;
@@ -336,7 +325,6 @@ export function GameScreen({
               key={currentPlayer.id}
               videoFile={currentPlayer.videoFile}
               imageUrl={currentPlayer.imageUrl}
-              revealProgress={revealProgress}
               onReady={handleImageReady}
             />
             {/* Vignette overlay at ≤3s */}

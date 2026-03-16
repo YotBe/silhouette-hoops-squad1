@@ -3,11 +3,10 @@ import { useState } from 'react';
 interface Props {
   videoFile: string;
   imageUrl?: string;
-  revealProgress?: number; // 0 = fully silhouetted, 1 = fully revealed
   onReady?: () => void;
 }
 
-export function BlurredVideoPlayer({ videoFile, imageUrl, revealProgress = 0, onReady }: Props) {
+export function BlurredVideoPlayer({ videoFile, imageUrl, onReady }: Props) {
   const [contentReady, setContentReady] = useState(false);
   const [useImageFallback, setUseImageFallback] = useState(false);
   const [showPlaceholder, setShowPlaceholder] = useState(false);
@@ -21,13 +20,6 @@ export function BlurredVideoPlayer({ videoFile, imageUrl, revealProgress = 0, on
     }
   };
 
-  // CSS silhouette filter based on revealProgress
-  // revealProgress=0: heavy blur + full grayscale + dark (pure silhouette)
-  // revealProgress=1: no filter (fully revealed)
-  const blurPx = Math.round(18 * (1 - revealProgress));
-  const grayscalePct = Math.round(90 * (1 - revealProgress));
-  const brightness = 0.35 + 0.65 * revealProgress;
-  const filterStyle = `blur(${blurPx}px) grayscale(${grayscalePct}%) brightness(${brightness.toFixed(2)})`;
 
   return (
     <div
@@ -61,12 +53,6 @@ export function BlurredVideoPlayer({ videoFile, imageUrl, revealProgress = 0, on
           onLoad={fireReady}
           onError={() => { setShowPlaceholder(true); fireReady(); }}
           className="absolute inset-0 w-full h-full object-cover z-[1]"
-          style={{
-            filter: filterStyle,
-            transition: 'filter 0.5s ease-out',
-            transform: 'scale(1.08)',
-            willChange: 'filter',
-          }}
         />
       ) : (
         /* Primary: blurred video */
@@ -86,12 +72,6 @@ export function BlurredVideoPlayer({ videoFile, imageUrl, revealProgress = 0, on
             }
           }}
           className="absolute inset-0 w-full h-full object-cover z-[1]"
-          style={{
-            filter: filterStyle,
-            transition: 'filter 0.5s ease-out',
-            transform: 'scale(1.05)',
-            willChange: 'filter',
-          }}
         />
       )}
 
