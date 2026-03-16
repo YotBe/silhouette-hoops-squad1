@@ -2,16 +2,20 @@ import { useState, useRef, lazy, Suspense, useEffect } from 'react';
 import { useGameState } from '@/hooks/useGameState';
 import { useBackgroundMusic } from '@/hooks/useBackgroundMusic';
 import { useDuelSync } from '@/hooks/useDuelSync';
+import { usePartySync } from '@/hooks/usePartySync';
 import { HomeScreen } from '@/components/HomeScreen';
 import { GameScreen } from '@/components/GameScreen';
 import { RevealScreen } from '@/components/RevealScreen';
 import { GameOverScreen } from '@/components/GameOverScreen';
 import { DuelLobbyScreen } from '@/components/DuelLobbyScreen';
+import { PartyLobbyScreen } from '@/components/PartyLobbyScreen';
+import { PartyScoreTicker } from '@/components/PartyScoreTicker';
 import { AchievementToast } from '@/components/AchievementToast';
 import { PageTransition } from '@/components/PageTransition';
 import { BottomNav, TabType } from '@/components/BottomNav';
 import { getChallengeFromURL, type ChallengeData } from '@/utils/challenge';
 import { type DuelRoom } from '@/utils/duels';
+import { type PartyRoom } from '@/utils/party';
 
 const StatsScreen = lazy(() => import('@/components/StatsScreen').then(m => ({ default: m.StatsScreen })));
 const GalleryScreen = lazy(() => import('@/components/GalleryScreen').then(m => ({ default: m.GalleryScreen })));
@@ -26,6 +30,9 @@ const Index = () => {
   const prevTabRef = useRef<TabType>('home');
   const [pendingChallenge, setPendingChallenge] = useState<ChallengeData | null>(null);
   const [showDuelLobby, setShowDuelLobby] = useState(false);
+  const [showPartyLobby, setShowPartyLobby] = useState(false);
+  const [partyRoom, setPartyRoom] = useState<PartyRoom | null>(null);
+  const [partyPid, setPartyPid] = useState('');
 
   useBackgroundMusic(game.isMuted);
 
@@ -39,6 +46,18 @@ const Index = () => {
     totalRounds: game.dailyPlayers.length,
   });
 
+  const isInGame = game.phase === 'playing' || game.phase === 'reveal' || game.phase === 'gameover';
+  const isPartyMode = !!partyRoom;
+
+  const partySync = usePartySync({
+    enabled: isPartyMode && isInGame,
+    room: partyRoom,
+    pid: partyPid,
+    myScore: game.score,
+    myRound: game.totalAnswered,
+    myDone: game.phase === 'gameover',
+  });
+
   // Parse challenge from URL on mount
   useEffect(() => {
     const challenge = getChallengeFromURL();
@@ -48,6 +67,14 @@ const Index = () => {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
+
+  // Clear party state when game ends and user goes home
+  useEffect(() => {
+    if (game.phase === 'home') {
+      setPartyRoom(null);
+      setPartyPid('');
+    }
+  }, [game.phase]);
 
   const handleTabChange = (tab: TabType) => {
     prevTabRef.current = activeTab;
@@ -61,11 +88,22 @@ const Index = () => {
     return next > prev ? 'right' : 'left';
   };
 
-  const isInGame = game.phase === 'playing' || game.phase === 'reveal' || game.phase === 'gameover';
-
   const handleDuelStart = (room: DuelRoom, role: 'host' | 'guest') => {
     setShowDuelLobby(false);
     game.startDuelGame(room, role);
+  };
+
+  const handlePartyStart = (room: PartyRoom, pid: string) => {
+    setShowPartyLobby(false);
+    setPartyRoom(room);
+    setPartyPid(pid);
+    // Start the game using the duel engine: reuse startDuelGame with party player IDs
+    game.startDuelGame(
+      room.id,
+      room.player_ids,
+      'host',  // party mode: everyone is essentially "host" of their own game
+      'Party'
+    );
   };
 
   const renderTabContent = () => {
@@ -123,6 +161,7 @@ const Index = () => {
               startMysteryMode={game.startMysteryMode}
               startHeatCheckMode={game.startHeatCheckMode}
               startDuelMode={() => setShowDuelLobby(true)}
+              startPartyMode={() => setShowPartyLobby(true)}
               startChallengeGame={(c) => { game.startChallengeGame(c); setPendingChallenge(null); }}
               pendingChallenge={pendingChallenge}
               highScores={game.highScores}
@@ -135,6 +174,8 @@ const Index = () => {
         );
     }
   };
+
+  const showingLobby = showDuelLobby || showPartyLobby;
 
   return (
     <>
@@ -153,7 +194,15 @@ const Index = () => {
         />
       )}
 
-      {!showDuelLobby && isInGame ? (
+      {showPartyLobby && !isInGame && (
+        <PartyLobbyScreen
+          playerName={localStorage.getItem('sg_player_name') || 'Anonymous'}
+          onStart={handlePartyStart}
+          onBack={() => setShowPartyLobby(false)}
+        />
+      )}
+
+      {!showingLobby && isInGame ? (
         <>
           {/* Keep GameScreen mounted during reveal for seamless transition */}
           {(game.phase === 'playing' || game.phase === 'reveal') && game.currentPlayer && (
@@ -195,6 +244,12 @@ const Index = () => {
               </PageTransition>
             </div>
           )}
+
+          {/* Party score ticker overlay */}
+          {isPartyMode && (game.phase === 'playing' || game.phase === 'reveal') && (
+            <PartyScoreTicker players={partySync.players} myPid={partyPid} />
+          )}
+
           {game.phase === 'reveal' && game.currentPlayer && (
             <div className="animate-fade-in" style={{ animationDuration: '150ms' }}>
               <RevealScreen
@@ -246,7 +301,7 @@ const Index = () => {
             </PageTransition>
           )}
         </>
-      ) : !showDuelLobby ? (
+      ) : !showingLobby ? (
         <>
           {renderTabContent()}
           <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />

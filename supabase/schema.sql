@@ -64,3 +64,22 @@ CREATE POLICY "sg_duels_update" ON sg_duels FOR UPDATE USING (true);
 
 -- Enable Realtime on duels so hosts see guest joins immediately
 ALTER PUBLICATION supabase_realtime ADD TABLE sg_duels;
+
+-- ── Party Rooms ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS sg_party_rooms (
+  id           uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  room_code    text UNIQUE NOT NULL,
+  player_ids   text[] NOT NULL,
+  players      jsonb NOT NULL DEFAULT '[]',  -- [{pid,name,score,round,done}]
+  status       text NOT NULL DEFAULT 'lobby', -- lobby | playing | done
+  round_count  integer NOT NULL DEFAULT 5,
+  created_at   timestamptz DEFAULT now(),
+  expires_at   timestamptz DEFAULT (now() + interval '2 hours')
+);
+CREATE INDEX IF NOT EXISTS sg_party_rooms_code ON sg_party_rooms (room_code);
+CREATE INDEX IF NOT EXISTS sg_party_rooms_expires ON sg_party_rooms (expires_at);
+ALTER TABLE sg_party_rooms ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "sg_party_read"   ON sg_party_rooms FOR SELECT USING (true);
+CREATE POLICY "sg_party_insert" ON sg_party_rooms FOR INSERT WITH CHECK (length(room_code) = 6);
+CREATE POLICY "sg_party_update" ON sg_party_rooms FOR UPDATE USING (true);
+ALTER PUBLICATION supabase_realtime ADD TABLE sg_party_rooms;

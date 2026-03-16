@@ -498,6 +498,35 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
           </div>
         </button>
 
+        {/* Party Mode Card */}
+        {startPartyMode && (
+          <button
+            onClick={startPartyMode}
+            className="w-full rounded-2xl overflow-hidden relative transition-all press-scale active:scale-[0.97]"
+            style={{
+              background: 'linear-gradient(135deg, hsl(280 67% 52% / 0.15) 0%, hsl(210 100% 56% / 0.05) 100%)',
+              borderColor: 'hsl(280 67% 52% / 0.3)',
+              borderWidth: '1px',
+              borderStyle: 'solid',
+            }}
+          >
+            <div className="absolute top-0 left-0 right-0 h-[1.5px]" style={{ background: 'linear-gradient(90deg, hsl(280 67% 52% / 0.9), transparent)' }} />
+            <div className="flex items-center gap-3.5 p-4">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 text-xl" style={{ background: 'hsl(280 67% 52% / 0.15)' }}>
+                🎉
+              </div>
+              <div className="text-left flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-base tracking-wider text-foreground">PARTY MODE</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'hsl(280 67% 52% / 0.2)', color: 'hsl(280 67% 52%)' }}>2-8</span>
+                </div>
+                <span className="text-[11px] text-muted-foreground">Same room · live scores · first right gets bonus</span>
+              </div>
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'hsl(280 67% 52% / 0.6)' }} />
+            </div>
+          </button>
+        )}
+
         {/* Live Duel Card */}
         {startDuelMode && (
           <button
