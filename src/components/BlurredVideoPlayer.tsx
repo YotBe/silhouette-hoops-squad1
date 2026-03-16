@@ -8,7 +8,7 @@ interface Props {
 
 export function BlurredVideoPlayer({ videoFile, imageUrl, onReady }: Props) {
   const [contentReady, setContentReady] = useState(false);
-  const [useImageFallback, setUseImageFallback] = useState(false);
+  const [useImageFallback, setUseImageFallback] = useState(!videoFile);
   const [showPlaceholder, setShowPlaceholder] = useState(false);
   const [readyFired, setReadyFired] = useState(false);
 
@@ -19,7 +19,6 @@ export function BlurredVideoPlayer({ videoFile, imageUrl, onReady }: Props) {
       onReady?.();
     }
   };
-
 
   return (
     <div
@@ -46,16 +45,34 @@ export function BlurredVideoPlayer({ videoFile, imageUrl, onReady }: Props) {
           <span className="text-muted-foreground/40 text-xs font-bold tracking-widest mt-2 uppercase">Mystery Player</span>
         </div>
       ) : useImageFallback && imageUrl ? (
-        /* Image fallback when video fails — still applies the blur/silhouette filter */
-        <img
-          src={imageUrl}
-          alt=""
-          onLoad={fireReady}
-          onError={() => { setShowPlaceholder(true); fireReady(); }}
-          className="absolute inset-0 w-full h-full object-cover z-[1]"
-        />
+        /* Silhouette image fallback — ESPN headshot turned into a true black silhouette
+           with slow Ken Burns zoom so it feels dynamic, not static */
+        <>
+          <img
+            src={imageUrl}
+            alt=""
+            onLoad={fireReady}
+            onError={() => { setShowPlaceholder(true); fireReady(); }}
+            className="absolute inset-0 w-full h-full object-cover z-[1] animate-ken-burns"
+            style={{ filter: 'brightness(0) contrast(1.2)', transformOrigin: 'center 30%' }}
+          />
+          {/* Blue glow overlay so it looks intentional, not broken */}
+          <div
+            className="absolute inset-0 z-[2] pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse at 50% 35%, hsl(var(--primary) / 0.15) 0%, transparent 70%)' }}
+          />
+          {/* "SILHOUETTE" badge */}
+          <div className="absolute top-3 right-3 z-[3] px-2 py-0.5 rounded-full text-[9px] font-bold tracking-widest"
+            style={{ background: 'hsl(var(--primary) / 0.2)', color: 'hsl(var(--primary))', border: '1px solid hsl(var(--primary) / 0.3)' }}>
+            SILHOUETTE
+          </div>
+          {/* Scan line */}
+          <div className="absolute inset-0 z-[2] pointer-events-none overflow-hidden">
+            <div className="animate-scan-line absolute left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+          </div>
+        </>
       ) : (
-        /* Primary: blurred video */
+        /* Primary: disguise video — no filter needed, content IS the challenge */
         <video
           src={videoFile}
           autoPlay
