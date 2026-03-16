@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DifficultyTier, TIER_CONFIG } from '@/data/players';
-import { Volume2, VolumeX, Calendar, Check, Smartphone, Timer, Flame, ChevronRight, Bell, Lock, Pencil, X as XIcon, Zap, Trophy } from 'lucide-react';
+import { Volume2, VolumeX, Calendar, Check, Smartphone, Timer, Flame, ChevronRight, Bell, Lock, Pencil, X as XIcon, Zap, Trophy, Swords } from 'lucide-react';
 import { InstallBanner } from '@/components/InstallBanner';
 import { isDailyChallengeCompleted, getDailyResult, getTimeUntilNextChallenge } from '@/utils/dailyChallenge';
 import { isHapticsEnabled, setHapticsEnabled, isWelcomeHapticsEnabled, setWelcomeHapticsEnabled } from '@/utils/haptics';
@@ -22,6 +22,7 @@ interface Props {
   startBuzzerBeater: () => void;
   startMysteryMode: () => void;
   startHeatCheckMode: () => void;
+  startDuelMode?: () => void;
   startChallengeGame?: (challenge: ChallengeData) => void;
   pendingChallenge?: ChallengeData | null;
   highScores: Record<string, number>;
@@ -41,7 +42,7 @@ function getStoredName(): string {
   try { return localStorage.getItem('sg_player_name') || ''; } catch { return ''; }
 }
 
-export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, startBuzzerBeater, startMysteryMode, startHeatCheckMode, startChallengeGame, pendingChallenge, highScores, xp, unlockedTiers, isMuted, onToggleMute }: Props) {
+export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, startBuzzerBeater, startMysteryMode, startHeatCheckMode, startDuelMode, startChallengeGame, pendingChallenge, highScores, xp, unlockedTiers, isMuted, onToggleMute }: Props) {
   const [hapticsOn, setHapticsOn] = useState(isHapticsEnabled);
   const [welcomeHapticsOn, setWelcomeHapticsOn] = useState(isWelcomeHapticsEnabled);
   const [playerName, setPlayerName] = useState(getStoredName);
@@ -495,6 +496,35 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
             <span className="text-[9px] text-muted-foreground/60 ml-1">Cold → Unstoppable</span>
           </div>
         </button>
+
+        {/* Live Duel Card */}
+        {startDuelMode && (
+          <button
+            onClick={startDuelMode}
+            className="w-full rounded-2xl overflow-hidden relative transition-all press-scale active:scale-[0.97]"
+            style={{
+              background: 'linear-gradient(135deg, hsl(38 100% 60% / 0.15) 0%, hsl(16 100% 58% / 0.05) 100%)',
+              borderColor: 'hsl(38 100% 60% / 0.3)',
+              borderWidth: '1px',
+              borderStyle: 'solid',
+            }}
+          >
+            <div className="absolute top-0 left-0 right-0 h-[1.5px]" style={{ background: 'linear-gradient(90deg, hsl(38 100% 60% / 0.9), transparent)' }} />
+            <div className="flex items-center gap-3.5 p-4">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'hsl(38 100% 60% / 0.15)' }}>
+                <Swords className="w-5 h-5" style={{ color: 'hsl(38 100% 60%)' }} />
+              </div>
+              <div className="text-left flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-base tracking-wider text-foreground">LIVE DUEL</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'hsl(38 100% 60% / 0.2)', color: 'hsl(38 100% 60%)' }}>1v1</span>
+                </div>
+                <span className="text-[11px] text-muted-foreground">Real-time 1v1 · same 5 players · live scores</span>
+              </div>
+              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'hsl(38 100% 60% / 0.6)' }} />
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Daily Quests */}

@@ -1,14 +1,17 @@
 import { useState, useRef, lazy, Suspense, useEffect } from 'react';
 import { useGameState } from '@/hooks/useGameState';
 import { useBackgroundMusic } from '@/hooks/useBackgroundMusic';
+import { useDuelSync } from '@/hooks/useDuelSync';
 import { HomeScreen } from '@/components/HomeScreen';
 import { GameScreen } from '@/components/GameScreen';
 import { RevealScreen } from '@/components/RevealScreen';
 import { GameOverScreen } from '@/components/GameOverScreen';
+import { DuelLobbyScreen } from '@/components/DuelLobbyScreen';
 import { AchievementToast } from '@/components/AchievementToast';
 import { PageTransition } from '@/components/PageTransition';
 import { BottomNav, TabType } from '@/components/BottomNav';
 import { getChallengeFromURL, type ChallengeData } from '@/utils/challenge';
+import { type DuelRoom } from '@/utils/duels';
 
 const StatsScreen = lazy(() => import('@/components/StatsScreen').then(m => ({ default: m.StatsScreen })));
 const GalleryScreen = lazy(() => import('@/components/GalleryScreen').then(m => ({ default: m.GalleryScreen })));
@@ -22,8 +25,19 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const prevTabRef = useRef<TabType>('home');
   const [pendingChallenge, setPendingChallenge] = useState<ChallengeData | null>(null);
+  const [showDuelLobby, setShowDuelLobby] = useState(false);
 
   useBackgroundMusic(game.isMuted);
+
+  const duelSync = useDuelSync({
+    enabled: game.isDuelMode,
+    roomId: game.duelRoomId,
+    role: game.duelRole,
+    myRound: game.totalAnswered,
+    myScore: game.score,
+    myDone: game.phase === 'gameover',
+    totalRounds: game.dailyPlayers.length,
+  });
 
   // Parse challenge from URL on mount
   useEffect(() => {
@@ -48,6 +62,11 @@ const Index = () => {
   };
 
   const isInGame = game.phase === 'playing' || game.phase === 'reveal' || game.phase === 'gameover';
+
+  const handleDuelStart = (room: DuelRoom, role: 'host' | 'guest') => {
+    setShowDuelLobby(false);
+    game.startDuelGame(room, role);
+  };
 
   const renderTabContent = () => {
     const direction = getTabDirection(activeTab);
@@ -103,6 +122,7 @@ const Index = () => {
               startBuzzerBeater={game.startBuzzerBeater}
               startMysteryMode={game.startMysteryMode}
               startHeatCheckMode={game.startHeatCheckMode}
+              startDuelMode={() => setShowDuelLobby(true)}
               startChallengeGame={(c) => { game.startChallengeGame(c); setPendingChallenge(null); }}
               pendingChallenge={pendingChallenge}
               highScores={game.highScores}
@@ -125,7 +145,15 @@ const Index = () => {
         />
       )}
 
-      {isInGame ? (
+      {showDuelLobby && !isInGame && (
+        <DuelLobbyScreen
+          playerName={localStorage.getItem('sg_player_name') || 'Anonymous'}
+          onStart={handleDuelStart}
+          onBack={() => setShowDuelLobby(false)}
+        />
+      )}
+
+      {!showDuelLobby && isInGame ? (
         <>
           {/* Keep GameScreen mounted during reveal for seamless transition */}
           {(game.phase === 'playing' || game.phase === 'reveal') && game.currentPlayer && (
@@ -201,8 +229,12 @@ const Index = () => {
                 isBuzzerMode={game.isBuzzerMode}
                 isHeatCheckMode={game.isHeatCheckMode}
                 isChallengeMode={game.isChallengeMode}
+                isDuelMode={game.isDuelMode}
                 challengerScore={game.challengerScore}
                 challengerName={game.challengerName}
+                duelOpponentName={game.duelOpponentName}
+                duelOpponentScore={duelSync.opponentScore}
+                duelRole={game.duelRole}
                 playerHistory={game.playerHistory}
                 leveledUp={game.leveledUp}
                 newLevel={game.newLevel}
@@ -212,12 +244,12 @@ const Index = () => {
             </PageTransition>
           )}
         </>
-      ) : (
+      ) : !showDuelLobby ? (
         <>
           {renderTabContent()}
           <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
         </>
-      )}
+      ) : null}
     </>
   );
 };

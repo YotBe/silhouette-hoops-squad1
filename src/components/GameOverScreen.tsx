@@ -1,10 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { TIER_CONFIG, DifficultyTier } from '@/data/players';
-import { Trophy, Target, Flame, RotateCcw, Home, Zap, Share2, Calendar, Timer, ArrowUp, Copy, Swords } from 'lucide-react';
+import { Trophy, Target, Flame, RotateCcw, Home, Zap, Share2, Calendar, Timer, ArrowUp, Copy, Swords, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { fireConfetti } from '@/utils/confetti';
 import { toast } from '@/hooks/use-toast';
 import { getDailyResult, getDailyShareText, getDailyChallengeNumber } from '@/utils/dailyChallenge';
 import { buildChallengeURL } from '@/utils/challenge';
+import { generateShareImage, shareOrDownloadImage } from '@/utils/shareImage';
+import { submitGlobalScore } from '@/utils/globalLeaderboard';
 
 interface AnswerEntry {
   correct: boolean;
@@ -24,8 +26,12 @@ interface Props {
   isBuzzerMode?: boolean;
   isHeatCheckMode?: boolean;
   isChallengeMode?: boolean;
+  isDuelMode?: boolean;
   challengerScore?: number;
   challengerName?: string;
+  duelOpponentName?: string;
+  duelOpponentScore?: number;
+  duelRole?: 'host' | 'guest' | null;
   playerHistory?: string[];
   leveledUp?: boolean;
   newLevel?: number;
@@ -46,7 +52,7 @@ function getEmojiForAnswer(entry: AnswerEntry): string {
   return entry.hintsUsed > 0 ? '🟡' : '🟢';
 }
 
-export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered, tier, highScores, xpEarned, answerHistory, isDailyMode, isBuzzerMode = false, isHeatCheckMode = false, isChallengeMode = false, challengerScore = 0, challengerName = '', playerHistory = [], leveledUp = false, newLevel = 1, onPlayAgain, onHome }: Props) {
+export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered, tier, highScores, xpEarned, answerHistory, isDailyMode, isBuzzerMode = false, isHeatCheckMode = false, isChallengeMode = false, isDuelMode = false, challengerScore = 0, challengerName = '', duelOpponentName = '', duelOpponentScore = 0, duelRole = null, playerHistory = [], leveledUp = false, newLevel = 1, onPlayAgain, onHome }: Props) {
   const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
   const isNewHighScore = !isDailyMode && !isBuzzerMode && !isHeatCheckMode && score >= (highScores[tier] || 0) && score > 0;
   const isBuzzerNewHS = isBuzzerMode && score >= (highScores['buzzer'] || 0) && score > 0;
@@ -62,14 +68,54 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
   const playerName = localStorage.getItem('sg_player_name') || 'Anonymous';
   const challengeWon = isChallengeMode && score > challengerScore;
   const challengeTied = isChallengeMode && score === challengerScore;
+  const duelWon = isDuelMode && score > duelOpponentScore;
+  const duelTied = isDuelMode && score === duelOpponentScore;
+  const [sharingImage, setSharingImage] = useState(false);
 
   useEffect(() => {
-    if (isNewHighScore || isBuzzerNewHS || isHeatNewHS || isPerfect || (isChallengeMode && challengeWon)) {
+    if (isNewHighScore || isBuzzerNewHS || isHeatNewHS || isPerfect || (isChallengeMode && challengeWon) || (isDuelMode && duelWon)) {
       setTimeout(() => fireConfetti(), 300);
     }
-  }, [isNewHighScore, isBuzzerNewHS, isHeatNewHS, isPerfect, isChallengeMode, challengeWon]);
+  }, [isNewHighScore, isBuzzerNewHS, isHeatNewHS, isPerfect, isChallengeMode, challengeWon, isDuelMode, duelWon]);
+
+  // Submit global score on mount
+  useEffect(() => {
+    if (score <= 0) return;
+    const modeKey = isHeatCheckMode ? 'heatcheck' : isBuzzerMode ? 'buzzer' : isDailyMode ? 'daily' : tier;
+    submitGlobalScore({
+      playerName,
+      score,
+      tier: modeKey,
+      streak: bestStreak,
+      accuracy,
+    }).catch(() => {});
+  }, []);
+
+  const handleSaveImage = async () => {
+    setSharingImage(true);
+    try {
+      const modeName = isDuelMode ? 'Live Duel' : isHeatCheckMode ? 'Heat Check' : isBuzzerMode ? 'Buzzer Beater' : isDailyMode ? `Daily #${challengeNumber}` : config.label;
+      const accentHsl = isHeatCheckMode ? '16 100% 58%' : isBuzzerMode ? '16 100% 58%' : config.color;
+      const blob = await generateShareImage({
+        score,
+        bestStreak,
+        totalCorrect,
+        totalAnswered,
+        emojiGrid: emojiGrid,
+        mode: modeName,
+        accentHsl,
+      });
+      if (blob) await shareOrDownloadImage(blob);
+    } finally {
+      setSharingImage(false);
+    }
+  };
 
   const getShareText = (): string => {
+    if (isDuelMode) {
+      const result = duelWon ? 'WON' : duelTied ? 'TIED' : 'LOST';
+      return `⚔️ WHO IS IT? LIVE DUEL ${result}!\n${emojiGrid}\nMy score: ${score} | ${duelOpponentName}: ${duelOpponentScore}\nwhoisit.app`;
+    }
     if (isChallengeMode) {
       const result = challengeWon ? 'WON' : challengeTied ? 'TIED' : 'LOST';
       return `⚔️ WHO IS IT? CHALLENGE ${result}!\n${emojiGrid}\nMy score: ${score} | ${challengerName}: ${challengerScore}\nwhoisit.app`;
@@ -143,6 +189,20 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
         </div>
       )}
 
+      {/* Duel result banner */}
+      {isDuelMode && (
+        <div className="text-center mb-4 animate-slam-down">
+          <p className={`font-display text-3xl tracking-wider drop-shadow-[0_0_20px_rgba(0,0,0,0.5)] ${
+            duelWon ? 'text-game-correct' : duelTied ? 'text-game-gold' : 'text-game-wrong'
+          }`}>
+            {duelWon ? '⚔️ YOU WIN!' : duelTied ? '🤝 TIE GAME!' : '💀 YOU LOSE!'}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            You: <span className="text-foreground font-score font-bold">{score}</span> · {duelOpponentName}: <span className="font-score font-bold" style={{ color: duelWon ? 'hsl(var(--game-wrong))' : 'hsl(var(--game-correct))' }}>{duelOpponentScore}</span>
+          </p>
+        </div>
+      )}
+
       {/* Challenge result banner */}
       {isChallengeMode && (
         <div className={`text-center mb-4 animate-slam-down`}>
@@ -177,6 +237,12 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
         <div className="flex items-center gap-2 mb-2 animate-slide-up">
           <Swords className="w-5 h-5 text-game-gold" />
           <span className="text-sm font-display text-muted-foreground tracking-wider">CHALLENGE vs {challengerName}</span>
+        </div>
+      )}
+      {isDuelMode && (
+        <div className="flex items-center gap-2 mb-2 animate-slide-up">
+          <Swords className="w-5 h-5 text-accent" />
+          <span className="text-sm font-display text-muted-foreground tracking-wider">LIVE DUEL vs {duelOpponentName}</span>
         </div>
       )}
       {isDailyMode && !isChallengeMode && (
@@ -268,6 +334,16 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
             <Share2 className="w-4 h-4" /> SHARE
           </button>
         </div>
+
+        {/* Save as Image */}
+        <button
+          onClick={handleSaveImage}
+          disabled={sharingImage}
+          className="w-full py-3.5 rounded-2xl glass border border-[rgba(255,255,255,0.1)] font-display tracking-widest press-scale flex items-center justify-center gap-2 text-foreground text-sm disabled:opacity-50"
+        >
+          {sharingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+          {sharingImage ? 'GENERATING...' : 'SAVE AS IMAGE'}
+        </button>
 
         {/* Challenge a Friend */}
         {!isChallengeMode && playerHistory.length > 0 && (

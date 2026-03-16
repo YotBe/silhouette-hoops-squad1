@@ -70,6 +70,11 @@ interface GameState {
   challengeRound: number;
   // Player history for challenge sharing
   playerHistory: string[];
+  // Live Duel Mode
+  isDuelMode: boolean;
+  duelRoomId: string;
+  duelRole: 'host' | 'guest' | null;
+  duelOpponentName: string;
 }
 
 const INITIAL_LIVES = 3;
@@ -150,6 +155,10 @@ export function useGameState() {
     challengePlayerIds: [],
     challengeRound: 0,
     playerHistory: [],
+    isDuelMode: false,
+    duelRoomId: '',
+    duelRole: null,
+    duelOpponentName: '',
   });
 
   const [xp, setXP] = useState(getStoredXP);
@@ -218,6 +227,7 @@ export function useGameState() {
     isHeatCheckMode: false, heatLevel: 0,
     isChallengeMode: false, challengerScore: 0, challengerName: '', challengePlayerIds: [] as string[], challengeRound: 0,
     playerHistory: [] as string[],
+    isDuelMode: false, duelRoomId: '', duelRole: null as null, duelOpponentName: '',
   };
 
   const startGame = useCallback((tier: DifficultyTier) => {
@@ -332,6 +342,34 @@ export function useGameState() {
       timeLeft: 15, usedPlayerIds: [firstPlayer.id],
       newLevel: xpToLevel(xp),
       lives: 99, isDailyMode: true, dailyPlayers, dailyRound: 0,
+      playerHistory: [firstPlayer.id],
+    });
+  }, [clearTimer, clearBuzzerTimer, refreshInventory, xp]);
+
+  const startDuelGame = useCallback((
+    roomId: string,
+    playerIds: string[],
+    role: 'host' | 'guest',
+    opponentName: string
+  ) => {
+    const duelPlayers = playerIds
+      .map(id => PLAYERS.find(p => p.id === id))
+      .filter((p): p is Player => !!p);
+    if (duelPlayers.length === 0) return;
+    clearTimer();
+    clearBuzzerTimer();
+    SFX.start();
+    const firstPlayer = duelPlayers[0];
+    const choices = generateChoices(firstPlayer, PLAYERS);
+    refreshInventory();
+    setState({
+      ...BASE_STATE_RESET,
+      phase: 'playing', tier: 'allstar', currentPlayer: firstPlayer, choices,
+      timeLeft: 12, usedPlayerIds: [firstPlayer.id],
+      newLevel: xpToLevel(xp),
+      isDailyMode: true, dailyPlayers: duelPlayers, dailyRound: 0,
+      lives: 99,
+      isDuelMode: true, duelRoomId: roomId, duelRole: role, duelOpponentName: opponentName,
       playerHistory: [firstPlayer.id],
     });
   }, [clearTimer, clearBuzzerTimer, refreshInventory, xp]);
@@ -818,6 +856,7 @@ export function useGameState() {
     startMysteryMode,
     startHeatCheckMode,
     startChallengeGame,
+    startDuelGame,
     revealNextClue,
     setVideoReady,
     submitAnswer,
