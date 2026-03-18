@@ -69,7 +69,7 @@ export function RevealScreen({ player, correct, selectedAnswer, choices, lives, 
       setTimeout(() => setShowDetails(true), 600),
       setTimeout(() => setShowImage(true), 700),
       setTimeout(() => setShowButton(true), 900),
-      setTimeout(() => setCanContinue(true), 1500),
+      setTimeout(() => setCanContinue(true), 800),
     ];
     return () => timers.forEach(clearTimeout);
   }, []);
@@ -114,8 +114,11 @@ export function RevealScreen({ player, correct, selectedAnswer, choices, lives, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center px-4 overflow-y-auto"
-      style={{ background: 'rgba(5, 8, 18, 0.95)' }}>
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center px-4 overflow-y-auto"
+      style={{ background: 'rgba(5, 8, 18, 0.95)' }}
+      onClick={() => canContinue && onContinue()}
+    >
 
       {/* Wrong screen red vignette pulse */}
       {!correct && (
@@ -214,7 +217,7 @@ export function RevealScreen({ player, correct, selectedAnswer, choices, lives, 
       )}
 
       {/* Player Image Card */}
-      <div className={`mb-4 w-full max-w-[220px] transition-all duration-500 ${showImage ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
+      <div className={`mb-3 w-full max-w-[280px] transition-all duration-500 ${showImage ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
         <div className="rounded-2xl overflow-hidden"
           style={{ boxShadow: `0 0 40px hsl(${player.teamColor} / 0.4), 0 0 80px hsl(${player.teamColor} / 0.15)` }}>
           <img
@@ -224,6 +227,33 @@ export function RevealScreen({ player, correct, selectedAnswer, choices, lives, 
           />
         </div>
       </div>
+
+      {/* Stats + Facts */}
+      {showImage && (
+        <div className="w-full max-w-[280px] mb-3 animate-slide-up" style={{ animationDelay: '0.05s' }}>
+          {player.stats && (
+            <div className="flex justify-around mb-2 px-3 py-2 rounded-xl glass border border-foreground/10">
+              <div className="text-center">
+                <span className="text-base font-score text-accent font-bold">{player.stats.ppg}</span>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wider">PPG</p>
+              </div>
+              <div className="text-center">
+                <span className="text-base font-score text-accent font-bold">{player.stats.rpg}</span>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wider">RPG</p>
+              </div>
+              <div className="text-center">
+                <span className="text-base font-score text-accent font-bold">{player.stats.apg}</span>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wider">APG</p>
+              </div>
+            </div>
+          )}
+          {player.facts && player.facts.length > 0 && (
+            <p className="text-[11px] text-muted-foreground text-center px-2 leading-relaxed">
+              💡 {player.facts[Math.abs(player.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % player.facts.length]}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Wrong answer: video replay thumbnail — only if videoFile exists */}
       {!correct && showImage && player.videoFile && !replayError && (
@@ -246,7 +276,7 @@ export function RevealScreen({ player, correct, selectedAnswer, choices, lives, 
       {/* Continue Button */}
       <div className={`w-full max-w-xs transition-all duration-300 ${showButton ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
         <button
-          onClick={() => canContinue && onContinue()}
+          onClick={(e) => { e.stopPropagation(); if (canContinue) onContinue(); }}
           disabled={!canContinue}
           className={`w-full py-4 rounded-2xl font-display tracking-widest press-scale text-white transition-opacity ${
             correct
@@ -255,7 +285,7 @@ export function RevealScreen({ player, correct, selectedAnswer, choices, lives, 
           } ${!canContinue ? 'opacity-50' : ''}`}
           style={{ boxShadow: correct ? '0 4px 25px rgba(59, 130, 246, 0.4)' : '0 4px 25px rgba(255, 107, 43, 0.4)' }}
         >
-          {getButtonText()}
+          {canContinue ? getButtonText() : '...'}
         </button>
       </div>
 

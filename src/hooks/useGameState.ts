@@ -12,6 +12,8 @@ import { xpToLevel } from '@/utils/levels';
 import { updateQuestProgress } from '@/utils/dailyQuests';
 import { recordMastery } from '@/utils/mastery';
 import { ChallengeData } from '@/utils/challenge';
+import { storageGet, storageSet, storageGetJSON, storageSetJSON } from '@/utils/safeStorage';
+import { calcRoundPoints, calcRoundXP } from './useScoring';
 
 export const HEAT_LEVELS = [
   { level: 0, name: 'COLD', tier: 'rookie' as DifficultyTier, timerSeconds: 15, color: '210 100% 65%', emoji: '🥶' },
@@ -90,27 +92,26 @@ const BUZZER_WRONG_PENALTY = 5;
 const TIER_MIGRATION: Record<string, string> = { allstar: 'pro', mvp: 'allstar', halloffame: 'mvp' };
 
 function getStoredHighScores(): Record<string, number> {
-  try {
-    const raw = JSON.parse(localStorage.getItem('sg_highscores') || '{}');
-    const migrated: Record<string, number> = {};
-    for (const [k, v] of Object.entries(raw)) {
-      const newKey = TIER_MIGRATION[k] || k;
-      migrated[newKey] = Math.max(migrated[newKey] || 0, v as number);
-    }
-    return migrated;
-  } catch { return {}; }
+  const raw = storageGetJSON<Record<string, number>>('sg_highscores', {});
+  const migrated: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const newKey = TIER_MIGRATION[k] || k;
+    migrated[newKey] = Math.max(migrated[newKey] || 0, v as number);
+  }
+  return migrated;
 }
 
 function getStoredXP(): number {
-  try { return parseInt(localStorage.getItem('sg_xp') || '0', 10); } catch { return 0; }
+  const raw = storageGet('sg_xp');
+  return raw ? parseInt(raw, 10) : 0;
 }
 
 function getStoredScoreHistory(): Array<{ score: number; tier: string; date: string; streak: number }> {
-  try { return JSON.parse(localStorage.getItem('sg_history') || '[]'); } catch { return []; }
+  return storageGetJSON<Array<{ score: number; tier: string; date: string; streak: number }>>('sg_history', []);
 }
 
 function getStoredMuted(): boolean {
-  try { return localStorage.getItem('sg_muted') === '1'; } catch { return false; }
+  return storageGet('sg_muted') === '1';
 }
 
 export function useGameState() {
@@ -186,7 +187,7 @@ export function useGameState() {
     setIsMuted(prev => {
       const next = !prev;
       setSFXMuted(next);
-      localStorage.setItem('sg_muted', next ? '1' : '0');
+      storageSet('sg_muted', next ? '1' : '0');
       return next;
     });
   }, []);
@@ -445,31 +446,25 @@ export function useGameState() {
         const maxTime = prev.isBuzzerMode ? 999 : TIER_CONFIG[prev.tier].timerSeconds;
         recordMastery(prev.currentPlayer!.id, prev.timeLeft / maxTime, prev.hintsRevealed.length);
         // Track guess distribution by hints used
-        try {
-          const dist = JSON.parse(localStorage.getItem('sg_guess_distribution') || '{}');
-          const key = String(prev.hintsRevealed.length);
-          dist[key] = (dist[key] || 0) + 1;
-          localStorage.setItem('sg_guess_distribution', JSON.stringify(dist));
-        } catch {}
+        const dist = storageGetJSON<Record<string, number>>('sg_guess_distribution', {});
+        const distKey = String(prev.hintsRevealed.length);
+        dist[distKey] = (dist[distKey] || 0) + 1;
+        storageSetJSON('sg_guess_distribution', dist);
         // Track era stats
-        try {
-          const era = getPlayerEra(prev.currentPlayer!);
-          const eraStats = JSON.parse(localStorage.getItem('sg_era_stats') || '{}');
-          if (!eraStats[era]) eraStats[era] = { correct: 0, total: 0 };
-          eraStats[era].correct += 1;
-          eraStats[era].total += 1;
-          localStorage.setItem('sg_era_stats', JSON.stringify(eraStats));
-        } catch {}
+        const era = getPlayerEra(prev.currentPlayer!);
+        const eraStats = storageGetJSON<Record<string, { correct: number; total: number }>>('sg_era_stats', {});
+        if (!eraStats[era]) eraStats[era] = { correct: 0, total: 0 };
+        eraStats[era].correct += 1;
+        eraStats[era].total += 1;
+        storageSetJSON('sg_era_stats', eraStats);
       } else {
         SFX.wrong(); hapticError();
         // Track era stats for wrong answers too
-        try {
-          const era = getPlayerEra(prev.currentPlayer!);
-          const eraStats = JSON.parse(localStorage.getItem('sg_era_stats') || '{}');
-          if (!eraStats[era]) eraStats[era] = { correct: 0, total: 0 };
-          eraStats[era].total += 1;
-          localStorage.setItem('sg_era_stats', JSON.stringify(eraStats));
-        } catch {}
+        const era = getPlayerEra(prev.currentPlayer!);
+        const eraStats = storageGetJSON<Record<string, { correct: number; total: number }>>('sg_era_stats', {});
+        if (!eraStats[era]) eraStats[era] = { correct: 0, total: 0 };
+        eraStats[era].total += 1;
+        storageSetJSON('sg_era_stats', eraStats);
       }
       const newStreak = correct ? prev.streak + 1 : 0;
       if (newStreak > 0 && newStreak % 3 === 0) { setTimeout(() => SFX.streak(), 300); }
@@ -479,16 +474,17 @@ export function useGameState() {
         refreshInventory();
       }
 
-      const streakMultiplier = Math.min(1 + Math.floor(prev.streak / 3) * 0.5, 3);
-      const hintPenalty = prev.hintsRevealed.length * 20;
-      const speedBonus = prev.isBuzzerMode ? 0 : Math.round(prev.timeLeft * 2);
-      const mysteryBase = prev.isMysteryMode ? Math.max((3 - prev.mysteryCluesRevealed) * 30, 25) : 0;
-      const basePoints = correct
-        ? (prev.isMysteryMode ? mysteryBase : Math.max(100 - hintPenalty, 25))
-        : 0;
-      const points = Math.round(basePoints * streakMultiplier) + (correct && !prev.isMysteryMode ? speedBonus : 0);
-      const baseXP = correct ? (newStreak > 3 ? 100 : 50) : 0;
-      const roundXP = correct ? Math.max(baseXP - prev.hintsRevealed.length * Math.round(baseXP * 0.15), 10) : 0;
+      const points = calcRoundPoints({
+        correct,
+        streak: prev.streak,
+        hintsRevealed: prev.hintsRevealed.length,
+        timeLeft: prev.timeLeft,
+        timerSeconds: TIER_CONFIG[prev.tier]?.timerSeconds ?? 15,
+        isMysteryMode: prev.isMysteryMode,
+        mysteryCluesRevealed: prev.mysteryCluesRevealed,
+        isBuzzerMode: prev.isBuzzerMode,
+      });
+      const roundXP = calcRoundXP(correct, newStreak, prev.hintsRevealed.length);
       const noHintCorrect = correct && prev.hintsRevealed.length === 0;
 
       // Buzzer mode
@@ -572,19 +568,15 @@ export function useGameState() {
       }
 
       // Track timeout in guess distribution
-      try {
-        const dist = JSON.parse(localStorage.getItem('sg_guess_distribution') || '{}');
-        dist['timeout'] = (dist['timeout'] || 0) + 1;
-        localStorage.setItem('sg_guess_distribution', JSON.stringify(dist));
-      } catch {}
+      const dist = storageGetJSON<Record<string, number>>('sg_guess_distribution', {});
+      dist['timeout'] = (dist['timeout'] || 0) + 1;
+      storageSetJSON('sg_guess_distribution', dist);
       // Track era stats for timeout
-      try {
-        const era = getPlayerEra(prev.currentPlayer!);
-        const eraStats = JSON.parse(localStorage.getItem('sg_era_stats') || '{}');
-        if (!eraStats[era]) eraStats[era] = { correct: 0, total: 0 };
-        eraStats[era].total += 1;
-        localStorage.setItem('sg_era_stats', JSON.stringify(eraStats));
-      } catch {}
+      const era = getPlayerEra(prev.currentPlayer!);
+      const eraStats = storageGetJSON<Record<string, { correct: number; total: number }>>('sg_era_stats', {});
+      if (!eraStats[era]) eraStats[era] = { correct: 0, total: 0 };
+      eraStats[era].total += 1;
+      storageSetJSON('sg_era_stats', eraStats);
 
       return {
         ...prev, phase: 'reveal' as GamePhase,
@@ -617,13 +609,13 @@ export function useGameState() {
           const prevLevel = xpToLevel(xp);
           const newLevel = xpToLevel(newXP);
           setXP(newXP);
-          localStorage.setItem('sg_xp', String(newXP));
+          storageSet('sg_xp', String(newXP));
 
           // Save daily/challenge mode to history
           const entry = { score: prev.score, tier: prev.isChallengeMode ? 'challenge' : 'daily', date: new Date().toISOString(), streak: prev.bestStreak, answerHistory: prev.answerHistory };
           const newHistory = [entry, ...scoreHistory].slice(0, 50);
           setScoreHistory(newHistory);
-          localStorage.setItem('sg_history', JSON.stringify(newHistory));
+          storageSetJSON('sg_history', newHistory);
 
           return { ...prev, phase: 'gameover' as GamePhase, leveledUp: newLevel > prevLevel, newLevel };
         }
@@ -645,19 +637,19 @@ export function useGameState() {
         const prevLevel = xpToLevel(xp);
         const newLevel = xpToLevel(newXP);
         setXP(newXP);
-        localStorage.setItem('sg_xp', String(newXP));
+        storageSet('sg_xp', String(newXP));
 
         const tierHighScore = highScores[prev.tier] || 0;
         if (prev.score > tierHighScore) {
           const newHS = { ...highScores, [prev.tier]: prev.score };
           setHighScores(newHS);
-          localStorage.setItem('sg_highscores', JSON.stringify(newHS));
+          storageSetJSON('sg_highscores', newHS);
         }
 
         const entry = { score: prev.score, tier: prev.tier, date: new Date().toISOString(), streak: prev.bestStreak, answerHistory: prev.answerHistory };
         const newHistory = [entry, ...scoreHistory].slice(0, 50);
         setScoreHistory(newHistory);
-        localStorage.setItem('sg_history', JSON.stringify(newHistory));
+        storageSetJSON('sg_history', newHistory);
 
         return {
           ...prev, phase: 'gameover' as GamePhase,
@@ -835,20 +827,20 @@ export function useGameState() {
         const prevLevel = xpToLevel(xp);
         const newLevel = xpToLevel(newXP);
         setXP(newXP);
-        localStorage.setItem('sg_xp', String(newXP));
+        storageSet('sg_xp', String(newXP));
 
         const modeKey = state.isBuzzerMode ? 'buzzer' : 'heatcheck';
         const modeHS = highScores[modeKey] || 0;
         if (state.score > modeHS) {
           const newHS = { ...highScores, [modeKey]: state.score };
           setHighScores(newHS);
-          localStorage.setItem('sg_highscores', JSON.stringify(newHS));
+          storageSetJSON('sg_highscores', newHS);
         }
 
         const entry = { score: state.score, tier: modeKey, date: new Date().toISOString(), streak: state.bestStreak, answerHistory: state.answerHistory };
         const newHistory = [entry, ...scoreHistory].slice(0, 50);
         setScoreHistory(newHistory);
-        localStorage.setItem('sg_history', JSON.stringify(newHistory));
+        storageSetJSON('sg_history', newHistory);
 
         if (newLevel > prevLevel) {
           setState(prev => ({ ...prev, leveledUp: true, newLevel }));

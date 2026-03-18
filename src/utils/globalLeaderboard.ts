@@ -1,5 +1,6 @@
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import { getCurrentSeasonId } from './seasons';
+import { supabaseLimiter } from './rateLimiter';
 
 export interface LeaderboardEntry {
   id: string;
@@ -22,6 +23,7 @@ export interface SubmitScorePayload {
 
 export async function submitGlobalScore(payload: SubmitScorePayload): Promise<void> {
   if (!isSupabaseEnabled || !supabase) return;
+  if (!supabaseLimiter.tryConsume()) return; // silently drop if rate-limited
   const season_week = getCurrentSeasonId();
   await supabase.from('sg_leaderboard').insert({
     player_name: payload.playerName || 'Anonymous',
@@ -38,6 +40,7 @@ export async function getGlobalLeaderboard(
   seasonId?: number
 ): Promise<LeaderboardEntry[]> {
   if (!isSupabaseEnabled || !supabase) return [];
+  if (!supabaseLimiter.tryConsume()) return [];
   const season = seasonId ?? getCurrentSeasonId();
   const { data, error } = await supabase
     .from('sg_leaderboard')
@@ -46,7 +49,7 @@ export async function getGlobalLeaderboard(
     .eq('season_week', season)
     .order('score', { ascending: false })
     .limit(25);
-  if (error) { console.error('Leaderboard fetch error:', error); return []; }
+  if (error) { return []; }
   return data ?? [];
 }
 
@@ -56,6 +59,7 @@ export async function getPlayerGlobalRank(
   seasonId?: number
 ): Promise<number | null> {
   if (!isSupabaseEnabled || !supabase) return null;
+  if (!supabaseLimiter.tryConsume()) return null;
   const season = seasonId ?? getCurrentSeasonId();
   const { count } = await supabase
     .from('sg_leaderboard')
