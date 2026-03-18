@@ -1,17 +1,26 @@
+interface SgWindow extends Window {
+  __sgMuted?: boolean;
+  __sgAudioCtx?: AudioContext;
+  webkitAudioContext?: typeof AudioContext;
+}
+
+const w = window as SgWindow;
+
 // Global mute flag — checked by all audio
 export function isSFXMuted(): boolean {
-  return !!(window as any).__sgMuted;
+  return !!w.__sgMuted;
 }
 
 export function setSFXMuted(val: boolean) {
-  (window as any).__sgMuted = val;
+  w.__sgMuted = val;
 }
 
 const audioCtx = () => {
-  if (!(window as any).__sgAudioCtx) {
-    (window as any).__sgAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  if (!w.__sgAudioCtx) {
+    const AudioCtx = window.AudioContext || w.webkitAudioContext;
+    w.__sgAudioCtx = new AudioCtx();
   }
-  return (window as any).__sgAudioCtx as AudioContext;
+  return w.__sgAudioCtx as AudioContext;
 };
 
 // ─── Helpers ───

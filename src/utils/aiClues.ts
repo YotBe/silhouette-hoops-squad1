@@ -1,6 +1,8 @@
 // Cache key: playerid + sorted hintsRevealed
 // Calls Claude claude-haiku-4-5-20251001 (fast, cheap) to generate a clue
 
+import { claudeLimiter } from './rateLimiter';
+
 const cache = new Map<string, string>();
 
 function getCacheKey(playerId: string, hintsAlreadyShown: string[]): string {
@@ -54,6 +56,9 @@ Clues already shown to the user (do NOT repeat these ideas):
 ${hintsAlreadyShown.length ? hintsAlreadyShown.map((c, i) => `${i + 1}. ${c}`).join('\n') : 'None yet'}
 
 Generate clue #${attemptNumber}:`;
+
+  // Respect rate limit — skip rather than error
+  if (!claudeLimiter.tryConsume()) return null;
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {

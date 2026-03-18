@@ -1,5 +1,6 @@
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import { PLAYERS, generateChoices } from '@/data/players';
+import { supabaseLimiter } from './rateLimiter';
 
 export interface DuelRoom {
   id: string;
@@ -53,6 +54,7 @@ export async function createDuelRoom(hostName: string): Promise<DuelRoom | null>
     };
   }
 
+  if (!supabaseLimiter.tryConsume()) return null;
   const code = randomCode();
   const playerIds = pickDuelPlayers();
   const { data, error } = await supabase
@@ -60,12 +62,13 @@ export async function createDuelRoom(hostName: string): Promise<DuelRoom | null>
     .insert({ room_code: code, host_name: hostName, player_ids: playerIds })
     .select()
     .single();
-  if (error) { console.error('createDuelRoom error:', error); return null; }
+  if (error) return null;
   return data as DuelRoom;
 }
 
 export async function joinDuelRoom(code: string, guestName: string): Promise<DuelRoom | null> {
   if (!isSupabaseEnabled || !supabase) return null;
+  if (!supabaseLimiter.tryConsume()) return null;
   const upper = code.toUpperCase().trim();
   const { data: room, error: fetchErr } = await supabase
     .from('sg_duels')
@@ -81,7 +84,7 @@ export async function joinDuelRoom(code: string, guestName: string): Promise<Due
     .eq('id', room.id)
     .select()
     .single();
-  if (updateErr) { console.error('joinDuelRoom error:', updateErr); return null; }
+  if (updateErr) return null;
   return updated as DuelRoom;
 }
 

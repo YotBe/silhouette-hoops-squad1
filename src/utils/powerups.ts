@@ -1,3 +1,5 @@
+import { storageGetJSON, storageSetJSON } from './safeStorage';
+
 export type PowerUpType = 'fiftyFifty' | 'extraTime' | 'secondChance';
 
 export interface PowerUpInventory {
@@ -17,30 +19,30 @@ export const POWERUP_INFO: Record<PowerUpType, { label: string; icon: string; de
 };
 
 export function getInventory(): PowerUpInventory {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_INVENTORY));
-      return { ...DEFAULT_INVENTORY };
-    }
-    return { fiftyFifty: raw.fiftyFifty || 0, extraTime: raw.extraTime || 0, secondChance: raw.secondChance || 0 };
-  } catch {
+  const raw = storageGetJSON<PowerUpInventory | null>(STORAGE_KEY, null);
+  if (!raw) {
+    storageSetJSON(STORAGE_KEY, DEFAULT_INVENTORY);
     return { ...DEFAULT_INVENTORY };
   }
+  return {
+    fiftyFifty: raw.fiftyFifty || 0,
+    extraTime: raw.extraTime || 0,
+    secondChance: raw.secondChance || 0,
+  };
 }
 
 export function usePowerUp(type: PowerUpType): boolean {
   const inv = getInventory();
   if (inv[type] <= 0) return false;
   inv[type]--;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(inv));
+  storageSetJSON(STORAGE_KEY, inv);
   return true;
 }
 
 export function awardPowerUp(type: PowerUpType, count = 1): void {
   const inv = getInventory();
   inv[type] += count;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(inv));
+  storageSetJSON(STORAGE_KEY, inv);
 }
 
 export function awardRandomPowerUp(): PowerUpType {

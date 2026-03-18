@@ -229,7 +229,12 @@ export function GameScreen({
 
   // Mode label for HUD
   const heatConfig = HEAT_LEVELS[heatLevel] ?? HEAT_LEVELS[0];
-  const modeLabel = isBuzzerMode
+  interface ModeLabelShape {
+    text: string;
+    className: string;
+    style?: React.CSSProperties;
+  }
+  const modeLabel: ModeLabelShape = isBuzzerMode
     ? { text: '🚨 BUZZER', className: 'text-game-wrong bg-game-wrong/15' }
     : isDailyMode
     ? { text: '📅 DAILY', className: 'text-primary bg-primary/15' }
@@ -249,9 +254,17 @@ export function GameScreen({
     : null;
 
   return (
-    <div className={`flex flex-col h-screen-safe bg-background relative overflow-hidden ${
-      feedbackState === 'wrong' ? 'animate-shake' : ''
-    }`}>
+    <div
+      className={`flex flex-col h-screen-safe bg-background relative overflow-hidden ${
+        feedbackState === 'wrong' ? 'animate-shake' : ''
+      }`}
+      role="main"
+      aria-label="Game screen"
+    >
+      {/* Screen-reader live region for answer feedback */}
+      <div aria-live="assertive" aria-atomic="true" className="sr-only">
+        {feedbackState === 'correct' ? 'Correct!' : feedbackState === 'wrong' ? 'Wrong!' : ''}
+      </div>
       {/* Flash red on time up */}
       {flashRed && (
         <div className="absolute inset-0 z-[60] pointer-events-none bg-game-wrong/30 animate-flash-red" />
@@ -351,7 +364,7 @@ export function GameScreen({
 
           {/* Mode tag */}
           <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${modeLabel.className}`}
-            style={('style' in modeLabel) ? (modeLabel as any).style : undefined}>
+            style={modeLabel.style}>
             {modeLabel.text}
           </span>
 
@@ -488,6 +501,8 @@ export function GameScreen({
             return (
               <button key={hint.key} onClick={() => !isRevealed && isNext && handleAnimatedHint(hint.key)}
                 disabled={isRevealed || !isNext || hintsRemaining <= 0}
+                aria-label={isRevealed ? `${hint.label} hint: ${hint.value}` : `Reveal ${hint.label} hint`}
+                aria-pressed={isRevealed}
                 className={`press-scale answer-button-press relative flex items-center justify-center rounded-full transition-all duration-200 ${
                   isRevealed
                     ? 'glass px-2.5 py-1 min-w-[62px] border border-primary/30'
@@ -559,6 +574,7 @@ export function GameScreen({
                 key={choice.id}
                 onClick={() => handleAnswer(choice.id)}
                 disabled={!imageReady || isEliminated || isAnswered}
+                aria-label={`${choice.name}${isEliminated ? ' (eliminated)' : ''}${isAnswered && isThis && feedbackState === 'correct' ? ' — correct!' : ''}${isAnswered && isThis && feedbackState === 'wrong' ? ' — wrong' : ''}`}
                 style={{
                   animation: imageReady ? `slide-up-fast 250ms ease-out ${idx * 50}ms both` : undefined,
                   opacity: imageReady ? undefined : 0,

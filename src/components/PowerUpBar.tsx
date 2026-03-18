@@ -24,6 +24,8 @@ export function PowerUpBar({ inventory, activeSecondChance, onUsePowerUp, disabl
             key={type}
             onClick={() => !isDisabled && onUsePowerUp(type)}
             disabled={isDisabled}
+            aria-label={`${info.label}: ${info.description}${count > 0 ? ` (${count} remaining)` : ' (none left)'}${isActive ? ' — active' : ''}`}
+            aria-pressed={isActive}
             className={`relative flex items-center gap-1 rounded-full text-[11px] font-bold transition-all duration-200 ${
               vertical ? 'px-2 py-2 min-w-[44px] min-h-[44px] justify-center' : 'px-2 py-1'
             } ${
@@ -35,10 +37,10 @@ export function PowerUpBar({ inventory, activeSecondChance, onUsePowerUp, disabl
             }`}
             title={info.description}
           >
-            <span>{info.icon}</span>
+            <span aria-hidden="true">{info.icon}</span>
             {!vertical && <span>{info.label}</span>}
             {count > 0 && !isActive && (
-              <span className="absolute -top-1.5 -right-1.5 text-[9px] bg-primary text-primary-foreground w-4 h-4 rounded-full flex items-center justify-center font-bold">
+              <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 text-[9px] bg-primary text-primary-foreground w-4 h-4 rounded-full flex items-center justify-center font-bold">
                 {count}
               </span>
             )}

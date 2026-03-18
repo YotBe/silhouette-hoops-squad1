@@ -6,17 +6,25 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: string }>;
 }
 
+interface NavigatorWithStandalone extends Navigator {
+  standalone?: boolean;
+}
+
+interface WindowWithMSStream extends Window {
+  MSStream?: unknown;
+}
+
 const VISIT_KEY = 'sg_visit_count';
 const DISMISS_KEY = 'sg_install_dismissed';
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 
 function isStandalone() {
   return window.matchMedia('(display-mode: standalone)').matches
-    || (navigator as any).standalone === true;
+    || (navigator as NavigatorWithStandalone).standalone === true;
 }
 
 function isIOS() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as WindowWithMSStream).MSStream;
 }
 
 export function InstallBanner() {

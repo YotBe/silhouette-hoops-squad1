@@ -1,4 +1,5 @@
 import { PLAYERS, Player, generateChoices } from '@/data/players';
+import { storageGet, storageSet, storageGetJSON, storageSetJSON } from './safeStorage';
 
 function seededRandom(seed: string): () => number {
   let h = 0;
@@ -30,9 +31,7 @@ export function getDailyChoices(player: Player): Player[] {
 }
 
 export function isDailyChallengeCompleted(): boolean {
-  try {
-    return localStorage.getItem('sg_daily_date') === getDailySeed();
-  } catch { return false; }
+  return storageGet('sg_daily_date') === getDailySeed();
 }
 
 export interface DailyResult {
@@ -50,20 +49,14 @@ export function getDailyChallengeNumber(): number {
 }
 
 export function saveDailyResult(result: DailyResult) {
-  try {
-    localStorage.setItem('sg_daily_date', result.date);
-    localStorage.setItem('sg_daily_result', JSON.stringify(result));
-  } catch {}
+  storageSet('sg_daily_date', result.date);
+  storageSetJSON('sg_daily_result', result);
 }
 
 export function getDailyResult(): DailyResult | null {
-  try {
-    const r = localStorage.getItem('sg_daily_result');
-    if (!r) return null;
-    const parsed = JSON.parse(r) as DailyResult;
-    if (parsed.date !== getDailySeed()) return null;
-    return parsed;
-  } catch { return null; }
+  const parsed = storageGetJSON<DailyResult | null>('sg_daily_result', null);
+  if (!parsed || parsed.date !== getDailySeed()) return null;
+  return parsed;
 }
 
 export function getTimeUntilNextChallenge(): { hours: number; minutes: number; seconds: number } {
