@@ -1,4 +1,5 @@
 import { useState, useRef, lazy, Suspense, useEffect } from 'react';
+import { storageGet } from '@/utils/safeStorage';
 import { useGameState } from '@/hooks/useGameState';
 import { useBackgroundMusic } from '@/hooks/useBackgroundMusic';
 import { useDuelSync } from '@/hooks/useDuelSync';
@@ -188,7 +189,7 @@ const Index = () => {
 
       {showDuelLobby && !isInGame && (
         <DuelLobbyScreen
-          playerName={localStorage.getItem('sg_player_name') || 'Anonymous'}
+          playerName={storageGet('sg_player_name') ?? 'Anonymous'}
           onStart={handleDuelStart}
           onBack={() => setShowDuelLobby(false)}
         />
@@ -196,7 +197,7 @@ const Index = () => {
 
       {showPartyLobby && !isInGame && (
         <PartyLobbyScreen
-          playerName={localStorage.getItem('sg_player_name') || 'Anonymous'}
+          playerName={storageGet('sg_player_name') ?? 'Anonymous'}
           onStart={handlePartyStart}
           onBack={() => setShowPartyLobby(false)}
         />
@@ -296,6 +297,8 @@ const Index = () => {
                 leveledUp={game.leveledUp}
                 newLevel={game.newLevel}
                 onPlayAgain={game.startGame}
+                onPlayBuzzer={game.startBuzzerBeater}
+                onPlayHeatCheck={game.startHeatCheckMode}
                 onHome={game.goHome}
               />
             </PageTransition>

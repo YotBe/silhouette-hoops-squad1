@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { DifficultyTier, TIER_CONFIG } from '@/data/players';
 import { Volume2, VolumeX, Calendar, Check, Smartphone, Timer, Flame, ChevronRight, Bell, Lock, Pencil, X as XIcon, Zap, Trophy, Swords } from 'lucide-react';
 import { InstallBanner } from '@/components/InstallBanner';
-import { isDailyChallengeCompleted, getDailyResult, getTimeUntilNextChallenge } from '@/utils/dailyChallenge';
+import { isDailyChallengeCompleted, getDailyResult, getTimeUntilNextChallenge, getDailyChallengeNumber } from '@/utils/dailyChallenge';
+import { storageGet, storageSet } from '@/utils/safeStorage';
 import { isHapticsEnabled, setHapticsEnabled, isWelcomeHapticsEnabled, setWelcomeHapticsEnabled } from '@/utils/haptics';
 import { checkAndUpdateStreak, getStreakInfo, claimStreakReward, type StreakInfo, type StreakReward } from '@/utils/dailyStreak';
 import { trackEvent } from '@/utils/analytics';
@@ -33,14 +34,8 @@ interface Props {
   onToggleMute: () => void;
 }
 
-function getDailyChallengeNumber(): number {
-  const start = new Date('2024-01-01').getTime();
-  const now = new Date().getTime();
-  return Math.floor((now - start) / (1000 * 60 * 60 * 24)) + 1;
-}
-
 function getStoredName(): string {
-  try { return localStorage.getItem('sg_player_name') || ''; } catch { return ''; }
+  return storageGet('sg_player_name') ?? '';
 }
 
 export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, startBuzzerBeater, startMysteryMode, startHeatCheckMode, startDuelMode, startPartyMode, startChallengeGame, pendingChallenge, highScores, xp, unlockedTiers, isMuted, onToggleMute }: Props) {
@@ -59,7 +54,7 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
   const dailyNum = getDailyChallengeNumber();
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   const [dailyReward, setDailyReward] = useState<DailyReward | null>(null);
-  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('sg_tutorial_seen'));
+  const [showTutorial, setShowTutorial] = useState(() => !storageGet('sg_tutorial_seen'));
   const lvl = levelProgress(xp);
   const nextAchievement = getNextAchievement();
 
@@ -92,7 +87,7 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
     if (!trimmed) return;
     setPlayerName(trimmed);
     setNameInput(trimmed);
-    try { localStorage.setItem('sg_player_name', trimmed); } catch {}
+    storageSet('sg_player_name', trimmed);
     setEditingName(false);
   };
 

@@ -7,6 +7,7 @@ import { getDailyResult, getDailyShareText, getDailyChallengeNumber } from '@/ut
 import { buildChallengeURL } from '@/utils/challenge';
 import { generateShareImage, shareOrDownloadImage } from '@/utils/shareImage';
 import { submitGlobalScore } from '@/utils/globalLeaderboard';
+import { storageGet } from '@/utils/safeStorage';
 
 interface AnswerEntry {
   correct: boolean;
@@ -36,6 +37,8 @@ interface Props {
   leveledUp?: boolean;
   newLevel?: number;
   onPlayAgain: (tier: DifficultyTier) => void;
+  onPlayBuzzer?: () => void;
+  onPlayHeatCheck?: () => void;
   onHome: () => void;
 }
 
@@ -52,7 +55,7 @@ function getEmojiForAnswer(entry: AnswerEntry): string {
   return entry.hintsUsed > 0 ? '🟡' : '🟢';
 }
 
-export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered, tier, highScores, xpEarned, answerHistory, isDailyMode, isBuzzerMode = false, isHeatCheckMode = false, isChallengeMode = false, isDuelMode = false, challengerScore = 0, challengerName = '', duelOpponentName = '', duelOpponentScore = 0, duelRole = null, playerHistory = [], leveledUp = false, newLevel = 1, onPlayAgain, onHome }: Props) {
+export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered, tier, highScores, xpEarned, answerHistory, isDailyMode, isBuzzerMode = false, isHeatCheckMode = false, isChallengeMode = false, isDuelMode = false, challengerScore = 0, challengerName = '', duelOpponentName = '', duelOpponentScore = 0, duelRole = null, playerHistory = [], leveledUp = false, newLevel = 1, onPlayAgain, onPlayBuzzer, onPlayHeatCheck, onHome }: Props) {
   const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
   const isNewHighScore = !isDailyMode && !isBuzzerMode && !isHeatCheckMode && score >= (highScores[tier] || 0) && score > 0;
   const isBuzzerNewHS = isBuzzerMode && score >= (highScores['buzzer'] || 0) && score > 0;
@@ -60,12 +63,12 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
   const isPerfect = totalAnswered > 0 && totalCorrect === totalAnswered;
   const config = TIER_CONFIG[tier];
   const nextTier = !isDailyMode && !isBuzzerMode && !isHeatCheckMode ? getNextTier(tier) : null;
-  const xp = parseInt(localStorage.getItem('sg_xp') || '0', 10);
+  const xp = parseInt(storageGet('sg_xp') ?? '0', 10);
   const nextTierUnlocked = nextTier ? xp >= TIER_CONFIG[nextTier].xpRequired : false;
   const challengeNumber = getDailyChallengeNumber();
   const emojiGrid = answerHistory.map(getEmojiForAnswer).join('');
   const streakMaintained = bestStreak >= 2;
-  const playerName = localStorage.getItem('sg_player_name') || 'Anonymous';
+  const playerName = storageGet('sg_player_name') ?? 'Anonymous';
   const challengeWon = isChallengeMode && score > challengerScore;
   const challengeTied = isChallengeMode && score === challengerScore;
   const duelWon = isDuelMode && score > duelOpponentScore;
@@ -355,7 +358,11 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
         )}
 
         {!isDailyMode && !isChallengeMode && (
-          <button onClick={() => isHeatCheckMode || isBuzzerMode ? window.location.reload() : onPlayAgain(tier)}
+          <button onClick={() => {
+            if (isHeatCheckMode && onPlayHeatCheck) onPlayHeatCheck();
+            else if (isBuzzerMode && onPlayBuzzer) onPlayBuzzer();
+            else onPlayAgain(tier);
+          }}
             className="w-full py-4 rounded-2xl glass border border-[rgba(255,255,255,0.1)] font-display tracking-widest press-scale flex items-center justify-center gap-2 text-foreground">
             <RotateCcw className="w-4 h-4" /> PLAY AGAIN
           </button>
