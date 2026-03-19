@@ -16,7 +16,7 @@ import { storageGet, storageSet, storageGetJSON, storageSetJSON } from '@/utils/
 import { calcRoundPoints, calcRoundXP } from './useScoring';
 
 export const HEAT_LEVELS = [
-  { level: 0, name: 'COLD', tier: 'rookie' as DifficultyTier, timerSeconds: 15, color: '210 100% 65%', emoji: '🥶' },
+  { level: 0, name: 'COLD', tier: 'rookie' as DifficultyTier, timerSeconds: 25, color: '210 100% 65%', emoji: '🥶' },
   { level: 1, name: 'WARMING UP', tier: 'pro' as DifficultyTier, timerSeconds: 12, color: '38 100% 60%', emoji: '🔥' },
   { level: 2, name: 'HEAT CHECK', tier: 'allstar' as DifficultyTier, timerSeconds: 10, color: '16 100% 58%', emoji: '🔥🔥' },
   { level: 3, name: 'ON FIRE', tier: 'mvp' as DifficultyTier, timerSeconds: 8, color: '0 100% 55%', emoji: '🔥🔥🔥' },
@@ -202,12 +202,36 @@ export function useGameState() {
 
   const nextPlayer = useCallback((tier: DifficultyTier, usedIds: string[]) => {
     const tierPlayers = getPlayersByTier(tier);
-    // Fall back to all players if tier has no content
     const pool_all = tierPlayers.length > 0 ? tierPlayers : PLAYERS;
     const available = pool_all.filter(p => !usedIds.includes(p.id));
     const pool = available.length > 0 ? available : pool_all;
-    const player = pool[Math.floor(Math.random() * pool.length)];
-    const choices = generateChoices(player, PLAYERS);
+
+    // Era-weighted selection: Modern 50%, Classic 30%, OG 20%
+    const modern = pool.filter(p => getPlayerEra(p) === 'modern');
+    const classic = pool.filter(p => getPlayerEra(p) === 'classic');
+    const og = pool.filter(p => getPlayerEra(p) === 'og');
+    const eraWeights: [Player[], number][] = [];
+    if (modern.length > 0) eraWeights.push([modern, 0.5]);
+    if (classic.length > 0) eraWeights.push([classic, 0.3]);
+    if (og.length > 0) eraWeights.push([og, 0.2]);
+
+    let player: Player;
+    if (eraWeights.length === 0) {
+      player = pool[Math.floor(Math.random() * pool.length)];
+    } else {
+      const totalWeight = eraWeights.reduce((s, [, w]) => s + w, 0);
+      let r = Math.random() * totalWeight;
+      let chosen = eraWeights[eraWeights.length - 1][0];
+      for (const [players, weight] of eraWeights) {
+        r -= weight;
+        if (r <= 0) { chosen = players; break; }
+      }
+      player = chosen[Math.floor(Math.random() * chosen.length)];
+    }
+
+    // MVP/Legend get 4 choices (harder); other tiers get 2 choices
+    const wrongCount: 1 | 3 = (tier === 'mvp' || tier === 'legend') ? 3 : 1;
+    const choices = generateChoices(player, PLAYERS, wrongCount);
     return { player, choices, usedIds: [...usedIds, player.id] };
   }, []);
 
@@ -295,7 +319,7 @@ export function useGameState() {
     setState({
       ...BASE_STATE_RESET,
       phase: 'playing', tier: 'rookie', currentPlayer: player, choices,
-      timeLeft: 15, usedPlayerIds: usedIds,
+      timeLeft: HEAT_LEVELS[0].timerSeconds, usedPlayerIds: usedIds,
       newLevel: xpToLevel(xp),
       isHeatCheckMode: true, heatLevel: 0,
       playerHistory: [player.id],

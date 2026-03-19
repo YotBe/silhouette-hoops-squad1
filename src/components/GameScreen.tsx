@@ -87,6 +87,9 @@ export function GameScreen({
   const timerPct = (timeLeft / maxTime) * 100;
   const timerColor = getTimerColor(timeLeft, maxTime);
   const [imageReady, setImageReady] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [countdownValue, setCountdownValue] = useState<number | 'GO' | null>(null);
+  const countdownStartedRef = useRef(false);
   const [deltaFlash, setDeltaFlash] = useState<number | null>(null);
   const [feedbackState, setFeedbackState] = useState<'correct' | 'wrong' | null>(null);
   const [scoreFloat, setScoreFloat] = useState<{ pts: number; speedBonus: number } | null>(null);
@@ -131,16 +134,43 @@ export function GameScreen({
   const ringOffset = ringCircumference * (1 - timerPct / 100);
 
   const handleImageReady = () => {
-    setImageReady(true);
-    onVideoReady();
+    setVideoLoaded(true);
   };
 
   const handleMysteryReady = useCallback(() => {
-    setImageReady(true);
-    onVideoReady();
-  }, [onVideoReady]);
+    setVideoLoaded(true);
+  }, []);
 
-  useEffect(() => { setImageReady(false); setAnsweredId(null); setFlashRed(false); }, [currentPlayer.id]);
+  useEffect(() => {
+    setImageReady(false);
+    setVideoLoaded(false);
+    setCountdownValue(null);
+    setAnsweredId(null);
+    setFlashRed(false);
+    countdownStartedRef.current = false;
+  }, [currentPlayer.id]);
+
+  // 3-2-1 countdown before each round (skip in buzzer mode for speed)
+  useEffect(() => {
+    if (!videoLoaded || countdownStartedRef.current) return;
+    countdownStartedRef.current = true;
+    if (isBuzzerMode) {
+      setImageReady(true);
+      onVideoReady();
+      return;
+    }
+    setCountdownValue(3);
+    const t1 = setTimeout(() => setCountdownValue(2), 1000);
+    const t2 = setTimeout(() => setCountdownValue(1), 2000);
+    const t3 = setTimeout(() => setCountdownValue('GO'), 3000);
+    const t4 = setTimeout(() => {
+      setCountdownValue(null);
+      setImageReady(true);
+      onVideoReady();
+    }, 3600);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoLoaded]);
 
   useEffect(() => {
     if (buzzerTimeDelta != null) {
@@ -265,6 +295,27 @@ export function GameScreen({
       <div aria-live="assertive" aria-atomic="true" className="sr-only">
         {feedbackState === 'correct' ? 'Correct!' : feedbackState === 'wrong' ? 'Wrong!' : ''}
       </div>
+      {/* 3-2-1-GO countdown overlay */}
+      {countdownValue !== null && (
+        <div className="absolute inset-0 z-[75] flex items-center justify-center pointer-events-none">
+          <span
+            key={String(countdownValue)}
+            className={`font-display drop-shadow-[0_0_30px_rgba(0,0,0,0.9)] animate-scale-in select-none ${
+              countdownValue === 'GO'
+                ? 'text-8xl text-game-correct'
+                : 'text-9xl text-white'
+            }`}
+            style={{
+              textShadow: countdownValue === 'GO'
+                ? '0 0 40px hsl(var(--game-correct)/0.8)'
+                : '0 0 40px rgba(0,0,0,0.5)',
+            }}
+          >
+            {countdownValue}
+          </span>
+        </div>
+      )}
+
       {/* Flash red on time up */}
       {flashRed && (
         <div className="absolute inset-0 z-[60] pointer-events-none bg-game-wrong/30 animate-flash-red" />
@@ -354,7 +405,7 @@ export function GameScreen({
         />
       )}
 
-      <div className="flex flex-col flex-1 px-3 pt-2 pb-[env(safe-area-inset-bottom,4px)] animate-slide-up min-h-0 relative z-10 justify-between gap-1">
+      <div className="flex flex-col flex-1 px-3 pt-2 pb-[env(safe-area-inset-bottom,4px)] animate-slide-up min-h-0 relative z-10 gap-1 overflow-hidden">
         {/* Glass HUD Bar */}
         <div className="glass-strong rounded-2xl px-3 py-2 flex items-center justify-between flex-shrink-0 border border-white/[0.07]">
           {/* Left: Close */}
@@ -450,7 +501,7 @@ export function GameScreen({
         </div>
 
         {/* Video / Mystery Container */}
-        <div className="flex-1 flex flex-col items-center justify-center min-h-0 max-h-[55vh]">
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0 max-h-[40vh] sm:max-h-[52vh] overflow-hidden">
           {isMysteryMode ? (
             <MysteryClueCard
               key={currentPlayer.id}
@@ -479,6 +530,24 @@ export function GameScreen({
             </div>
           )}
         </div>
+
+        {/* Horizontal countdown timer bar - directly below video */}
+        {!isBuzzerMode && (
+          <div className="flex-shrink-0 h-2 rounded-full overflow-hidden bg-white/10 relative">
+            <div
+              className={timeLeft <= 3 && imageReady && !answeredId ? 'absolute inset-y-0 left-0 rounded-full animate-pulse' : 'absolute inset-y-0 left-0 rounded-full'}
+              style={{
+                width: `${imageReady ? timerPct : 100}%`,
+                transition: answeredId || !imageReady ? 'none' : 'width 1s linear, background-color 0.5s ease',
+                backgroundColor: timerPct > 50
+                  ? 'hsl(142 71% 45%)'
+                  : timerPct > 30
+                  ? 'hsl(45 93% 58%)'
+                  : 'hsl(0 72% 51%)',
+              }}
+            />
+          </div>
+        )}
 
         {/* Power-ups row (horizontal, below video) */}
         <div className="flex justify-center flex-shrink-0">
@@ -549,7 +618,10 @@ export function GameScreen({
         )}
 
         {/* Answer Grid — hidden until video ready, glass cards with feedback */}
-        <div className={`grid grid-cols-2 gap-2 flex-shrink-0 transition-all duration-300 ${
+        {/* 2 choices (Rookie/Pro/All-Star): single full-width column; 4 choices (MVP/Legend): 2×2 grid */}
+        <div className={`grid gap-2 flex-shrink-0 transition-all duration-300 ${
+          choices.length <= 2 ? 'grid-cols-1' : 'grid-cols-2'
+        } ${
           imageReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
         }`}>
           {choices.map((choice, idx) => {
