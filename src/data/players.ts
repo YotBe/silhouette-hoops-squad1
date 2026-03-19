@@ -21,7 +21,7 @@ export interface Player {
 }
 
 export const TIER_CONFIG: Record<DifficultyTier, { label: string; color: string; xpRequired: number; timerSeconds: number }> = {
-  rookie:  { label: 'Rookie',   color: '142 71% 45%', xpRequired: 0,    timerSeconds: 15 },
+  rookie:  { label: 'Rookie',   color: '142 71% 45%', xpRequired: 0,    timerSeconds: 25 },
   pro:     { label: 'Pro',      color: '210 100% 56%', xpRequired: 200,  timerSeconds: 12 },
   allstar: { label: 'All-Star', color: '280 67% 52%', xpRequired: 500,  timerSeconds: 10 },
   mvp:     { label: 'MVP',      color: '45 93% 58%',  xpRequired: 1000, timerSeconds: 8  },
@@ -850,17 +850,17 @@ export function getPlayersByTier(tier: DifficultyTier): Player[] {
   return PLAYERS.filter(p => p.tier === tier);
 }
 
-export function generateChoices(correct: Player, allPlayers: Player[]): Player[] {
+export function generateChoices(correct: Player, allPlayers: Player[], wrongCount: 1 | 3 = 3): Player[] {
   // Prefer same-tier players as wrong choices for better difficulty balance
   const sameTier = allPlayers.filter(p => p.id !== correct.id && p.tier === correct.tier);
   const otherTier = allPlayers.filter(p => p.id !== correct.id && p.tier !== correct.tier);
   const shuffledSame = [...sameTier].sort(() => Math.random() - 0.5);
   const shuffledOther = [...otherTier].sort(() => Math.random() - 0.5);
-  const wrongChoices = [...shuffledSame, ...shuffledOther].slice(0, 3);
-  // Ensure we always have 3 wrong choices (fall back if not enough players)
-  const safeWrong = wrongChoices.length >= 3
+  const wrongChoices = [...shuffledSame, ...shuffledOther].slice(0, wrongCount);
+  // Ensure we always have enough wrong choices (fall back if not enough players)
+  const safeWrong = wrongChoices.length >= wrongCount
     ? wrongChoices
-    : [...allPlayers.filter(p => p.id !== correct.id).sort(() => Math.random() - 0.5)].slice(0, 3);
+    : [...allPlayers.filter(p => p.id !== correct.id).sort(() => Math.random() - 0.5)].slice(0, wrongCount);
   return [correct, ...safeWrong].sort(() => Math.random() - 0.5);
 }
 

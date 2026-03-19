@@ -84,10 +84,11 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
 
   const saveName = () => {
     const trimmed = nameInput.trim().slice(0, 20);
-    if (!trimmed) return;
-    setPlayerName(trimmed);
-    setNameInput(trimmed);
-    storageSet('sg_player_name', trimmed);
+    if (trimmed) {
+      setPlayerName(trimmed);
+      setNameInput(trimmed);
+      storageSet('sg_player_name', trimmed);
+    }
     setEditingName(false);
   };
 
@@ -125,31 +126,28 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
       {editingName ? (
         <div className="w-full max-w-sm mb-4 animate-scale-in">
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest text-center mb-2">
-            {playerName ? 'Change your name' : "What's your name?"}
+            {playerName ? 'Change your name' : "What's your name? (optional)"}
           </p>
           <div className="flex gap-2">
             <input
               type="text"
               value={nameInput}
               onChange={e => setNameInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { if (playerName) setEditingName(false); } }}
-              placeholder="Enter your name..."
+              onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false); }}
+              placeholder="Enter name to save your score (optional)"
               maxLength={20}
               autoFocus
               className="flex-1 px-4 py-2.5 rounded-xl bg-white/[0.07] border border-white/[0.12] text-foreground text-sm font-semibold placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
             />
             <button
               onClick={saveName}
-              disabled={!nameInput.trim()}
-              className="px-4 py-2.5 rounded-xl gradient-hero text-white text-sm font-bold press-scale disabled:opacity-40"
+              className="px-4 py-2.5 rounded-xl gradient-hero text-white text-sm font-bold press-scale"
             >
-              Save
+              {nameInput.trim() ? 'Save' : 'Skip'}
             </button>
-            {playerName && (
-              <button onClick={() => setEditingName(false)} className="p-2.5 rounded-xl glass border border-white/[0.08] press-scale">
-                <XIcon className="w-4 h-4 text-muted-foreground" />
-              </button>
-            )}
+            <button onClick={() => setEditingName(false)} className="p-2.5 rounded-xl glass border border-white/[0.08] press-scale">
+              <XIcon className="w-4 h-4 text-muted-foreground" />
+            </button>
           </div>
         </div>
       ) : (
@@ -157,7 +155,7 @@ export function HomeScreen({ tier, setTier, startGame, startDailyChallenge, star
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Welcome back</p>
             <h2 className="font-display text-xl text-foreground tracking-wider" style={{ textShadow: '0 0 20px hsl(var(--primary)/0.3)' }}>
-              {playerName} 👋
+              {playerName || 'GUEST'} 👋
             </h2>
           </div>
           <button
