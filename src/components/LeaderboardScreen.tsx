@@ -127,7 +127,11 @@ export function LeaderboardScreen({ history, highScores, onBack }: Props) {
             {loadingGlobal && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
           </div>
           {!loadingGlobal && globalEntries.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4 text-sm">No global scores yet — be the first!</p>
+            <div className="flex flex-col items-center py-8">
+              <div className="text-4xl mb-3">🏆</div>
+              <p className="text-sm font-bold text-foreground mb-1">No Global Scores Yet</p>
+              <p className="text-xs text-muted-foreground text-center max-w-[200px]">Be the first to claim the #1 spot on the global leaderboard!</p>
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -164,7 +168,11 @@ export function LeaderboardScreen({ history, highScores, onBack }: Props) {
         <div className="w-full max-w-md mx-auto pb-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Your Sessions</p>
           {tabEntries.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4 text-sm">No games played in {currentTab.label} yet</p>
+            <div className="flex flex-col items-center py-6">
+              <div className="text-3xl mb-2">🎮</div>
+              <p className="text-sm font-bold text-foreground mb-1">No {currentTab.label} Games Yet</p>
+              <p className="text-xs text-muted-foreground text-center max-w-[220px]">Play a {currentTab.label} game to see your scores here!</p>
+            </div>
           ) : (
             <Table>
               <TableHeader>

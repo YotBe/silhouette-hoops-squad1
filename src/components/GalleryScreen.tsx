@@ -90,6 +90,35 @@ export function GalleryScreen() {
         ))}
       </div>
 
+      {/* Empty state banner */}
+      {collectedCount === 0 && seenCount === 0 && (
+        <div className="mb-4 p-4 rounded-2xl glass border border-primary/20 animate-scale-in">
+          <div className="flex items-center gap-3">
+            <div className="text-3xl">🔍</div>
+            <div>
+              <p className="text-sm font-bold text-foreground">Discover NBA Players!</p>
+              <p className="text-[11px] text-muted-foreground">
+                Play games to identify players and grow your collection. Correctly guessed players appear here with full details!
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-game-correct/10 border border-game-correct/20">
+              <span className="text-[10px]">🟢</span>
+              <span className="text-[10px] text-game-correct font-semibold">Collected</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-game-wrong/10 border border-game-wrong/20">
+              <span className="text-[10px]">🔴</span>
+              <span className="text-[10px] text-game-wrong font-semibold">Missed</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary border border-[rgba(255,255,255,0.08)]">
+              <span className="text-[10px]">🔒</span>
+              <span className="text-[10px] text-muted-foreground font-semibold">Locked</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Grid */}
       <div className="grid grid-cols-3 gap-3 flex-1 overflow-y-auto pb-6">
         {filtered.map((player, i) => {

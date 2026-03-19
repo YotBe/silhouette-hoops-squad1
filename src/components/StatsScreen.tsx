@@ -85,6 +85,38 @@ export function StatsScreen({ history, highScores }: Props) {
         </div>
       </div>
 
+      {totalGames === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center px-6 pb-24">
+          <div className="text-6xl mb-4 animate-spin-basketball">🏀</div>
+          <h3 className="font-display text-2xl text-foreground tracking-wider mb-2">NO GAMES YET</h3>
+          <p className="text-sm text-muted-foreground text-center mb-6 max-w-xs">
+            Play your first game to start tracking your stats, streaks, and personal records!
+          </p>
+          <div className="w-full max-w-xs space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-xl glass border border-[rgba(255,255,255,0.08)]">
+              <Target className="w-5 h-5 text-primary flex-shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-foreground">Win Rate Tracking</p>
+                <p className="text-[10px] text-muted-foreground">See how accurate your guesses are</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 rounded-xl glass border border-[rgba(255,255,255,0.08)]">
+              <Flame className="w-5 h-5 text-accent flex-shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-foreground">Streak Records</p>
+                <p className="text-[10px] text-muted-foreground">Track your longest correct answer streaks</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 rounded-xl glass border border-[rgba(255,255,255,0.08)]">
+              <TrendingUp className="w-5 h-5 text-game-gold flex-shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-foreground">Era Accuracy</p>
+                <p className="text-[10px] text-muted-foreground">Discover which NBA eras you know best</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto px-4 pb-24 space-y-5 scrollbar-hide">
         <div className="grid grid-cols-4 gap-2">
           {headerStats.map((s) => (
@@ -191,6 +223,7 @@ export function StatsScreen({ history, highScores }: Props) {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

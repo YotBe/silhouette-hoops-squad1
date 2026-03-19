@@ -36,6 +36,21 @@ export function AchievementsScreen() {
         />
       </div>
 
+      {/* Motivational banner when no achievements unlocked */}
+      {unlockedCount === 0 && (
+        <div className="mb-4 p-4 rounded-2xl glass border border-primary/20 animate-scale-in">
+          <div className="flex items-center gap-3">
+            <div className="text-3xl">🎯</div>
+            <div>
+              <p className="text-sm font-bold text-foreground">Start Earning Badges!</p>
+              <p className="text-[11px] text-muted-foreground">
+                Play games, build streaks, and discover players to unlock achievements. Check the progress bars below to see how close you are!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2 flex-1 overflow-y-auto pb-6">
         {ACHIEVEMENTS.map((a, i) => {
           const isUnlocked = unlocked.has(a.id);
