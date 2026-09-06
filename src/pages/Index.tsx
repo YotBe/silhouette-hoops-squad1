@@ -15,6 +15,8 @@ import { AchievementToast } from '@/components/AchievementToast';
 import { PageTransition } from '@/components/PageTransition';
 import { BottomNav, TabType } from '@/components/BottomNav';
 import { getChallengeFromURL, type ChallengeData } from '@/utils/challenge';
+import { captureReferral, markReferralConverted } from '@/utils/viral';
+import { ChallengeIntroScreen } from '@/components/ChallengeIntroScreen';
 import { type DuelRoom } from '@/utils/duels';
 import { type PartyRoom } from '@/utils/party';
 
@@ -30,6 +32,7 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const prevTabRef = useRef<TabType>('home');
   const [pendingChallenge, setPendingChallenge] = useState<ChallengeData | null>(null);
+  const [showChallengeIntro, setShowChallengeIntro] = useState(false);
   const [showDuelLobby, setShowDuelLobby] = useState(false);
   const [showPartyLobby, setShowPartyLobby] = useState(false);
   const [partyRoom, setPartyRoom] = useState<PartyRoom | null>(null);
@@ -59,15 +62,28 @@ const Index = () => {
     myDone: game.phase === 'gameover',
   });
 
-  // Parse challenge from URL on mount
+  // Parse challenge + invite attribution from the URL on mount
   useEffect(() => {
+    // Attribution first: it must be recorded even if the payload is unusable.
+    captureReferral(window.location.search);
     const challenge = getChallengeFromURL();
     if (challenge) {
       setPendingChallenge(challenge);
+      // An arriving challenger sees the stakes, not the menu — the home screen
+      // greets first-timers with a tutorial and a name form, which is a lot to
+      // wade through when a friend just dared you to beat a number.
+      setShowChallengeIntro(true);
+    }
+    if (challenge || window.location.search) {
       // Clean URL so refresh doesn't re-trigger
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
+
+  // A referred visitor counts as converted once they finish a game.
+  useEffect(() => {
+    if (game.phase === 'gameover') markReferralConverted();
+  }, [game.phase]);
 
   // Clear party state when game ends and user goes home
   useEffect(() => {
@@ -177,6 +193,23 @@ const Index = () => {
   };
 
   const showingLobby = showDuelLobby || showPartyLobby;
+
+  const acceptChallenge = () => {
+    if (!pendingChallenge) return;
+    setShowChallengeIntro(false);
+    game.startChallengeGame(pendingChallenge);
+    setPendingChallenge(null);
+  };
+
+  if (showChallengeIntro && pendingChallenge && !isInGame) {
+    return (
+      <ChallengeIntroScreen
+        challenge={pendingChallenge}
+        onAccept={acceptChallenge}
+        onDecline={() => setShowChallengeIntro(false)}
+      />
+    );
+  }
 
   return (
     <>

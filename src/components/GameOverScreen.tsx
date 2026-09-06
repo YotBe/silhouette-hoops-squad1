@@ -5,6 +5,8 @@ import { fireConfetti } from '@/utils/confetti';
 import { toast } from '@/hooks/use-toast';
 import { getDailyResult, getDailyShareText, getDailyChallengeNumber } from '@/utils/dailyChallenge';
 import { buildChallengeURL } from '@/utils/challenge';
+import { buildShareLink, buildChallengeText, buildRematchText, buildFlexLine, recordInviteSent } from '@/utils/viral';
+import { trackEvent } from '@/utils/analytics';
 import { generateShareImage, shareOrDownloadImage } from '@/utils/shareImage';
 import { submitGlobalScore } from '@/utils/globalLeaderboard';
 import { storageGet } from '@/utils/safeStorage';
@@ -74,6 +76,7 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
   const duelWon = isDuelMode && score > duelOpponentScore;
   const duelTied = isDuelMode && score === duelOpponentScore;
   const [sharingImage, setSharingImage] = useState(false);
+  const shareModeKey = isDuelMode ? 'duel' : isChallengeMode ? 'challenge' : isHeatCheckMode ? 'heatcheck' : isBuzzerMode ? 'buzzer' : isDailyMode ? 'daily' : tier;
 
   useEffect(() => {
     if (isNewHighScore || isBuzzerNewHS || isHeatNewHS || isPerfect || (isChallengeMode && challengeWon) || (isDuelMode && duelWon)) {
@@ -114,44 +117,84 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
     }
   };
 
+  // A bare "whoisit.app" is not a link in most chat apps — it does not open,
+  // and it carries no attribution. Every share now ends in a real tappable URL.
+  const shareLink = () => buildShareLink({ kind: 'score' });
+
   const getShareText = (): string => {
     if (isDuelMode) {
       const result = duelWon ? 'WON' : duelTied ? 'TIED' : 'LOST';
-      return `⚔️ WHO IS IT? LIVE DUEL ${result}!\n${emojiGrid}\nMy score: ${score} | ${duelOpponentName}: ${duelOpponentScore}\nwhoisit.app`;
+      return `⚔️ WHO IS IT? LIVE DUEL ${result}!\n${emojiGrid}\nMy score: ${score} | ${duelOpponentName}: ${duelOpponentScore}\n${shareLink()}`;
     }
     if (isChallengeMode) {
       const result = challengeWon ? 'WON' : challengeTied ? 'TIED' : 'LOST';
-      return `⚔️ WHO IS IT? CHALLENGE ${result}!\n${emojiGrid}\nMy score: ${score} | ${challengerName}: ${challengerScore}\nwhoisit.app`;
+      return `⚔️ WHO IS IT? CHALLENGE ${result}!\n${emojiGrid}\nMy score: ${score} | ${challengerName}: ${challengerScore}\n${shareLink()}`;
     }
     if (isDailyMode) {
-      return `WHO IS IT? 🏀 Day #${challengeNumber}\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\nwhoisit.app`;
+      return `WHO IS IT? 🏀 Day #${challengeNumber}\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\n${shareLink()}`;
     }
     if (isBuzzerMode) {
-      return `🚨 WHO IS IT? Buzzer Beater!\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\nwhoisit.app`;
+      return `🚨 WHO IS IT? Buzzer Beater!\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\n${shareLink()}`;
     }
     if (isHeatCheckMode) {
-      return `🔥 WHO IS IT? Heat Check!\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\nwhoisit.app`;
+      return `🔥 WHO IS IT? Heat Check!\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\n${shareLink()}`;
     }
-    return `🏀 WHO IS IT? — ${config.label}\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\nwhoisit.app`;
+    return `🏀 WHO IS IT? — ${config.label}\n${emojiGrid}\nScore: ${score} | 🔥 ${bestStreak} streak\n${shareLink()}`;
   };
 
+  const flexLine = buildFlexLine({ score, accuracy, bestStreak });
+
+  /** Send the same set of players to someone new. */
   const handleChallengeFriend = async () => {
     if (playerHistory.length === 0) return;
     const url = buildChallengeURL({ playerIds: playerHistory, score, name: playerName, tier });
-    const text = `⚔️ Beat my WHO IS IT? score of ${score}!\n${url}`;
+    const text = buildChallengeText({ senderName: playerName, score, url, grid: emojiGrid, flex: flexLine });
+    recordInviteSent('challenge', { tier, rounds: playerHistory.length, score });
+    await deliver(text, url, 'Challenge link copied!', `Dare a friend to beat ${score} pts`);
+  };
+
+  /**
+   * The return leg of a challenge.
+   *
+   * Answering a challenge used to be a dead end — the only follow-up was
+   * replaying alone. Handing the ball back to whoever sent it is what turns a
+   * single share into a rally, so it is the primary action after a challenge.
+   */
+  const handleSendItBack = async () => {
+    if (playerHistory.length === 0) return;
+    const opponentName = isDuelMode ? duelOpponentName : challengerName;
+    const opponentScore = isDuelMode ? duelOpponentScore : challengerScore;
+    const url = buildChallengeURL({ playerIds: playerHistory, score, name: playerName, tier }, 'rematch');
+    const text = buildRematchText({
+      senderName: playerName,
+      opponentName,
+      opponentScore,
+      won: isDuelMode ? duelWon : challengeWon,
+      score,
+      url,
+      grid: emojiGrid,
+    });
+    recordInviteSent('rematch', { tier, rounds: playerHistory.length, score, opponentScore });
+    trackEvent('rematch_sent', { won: isDuelMode ? duelWon : challengeWon });
+    await deliver(text, url, 'Rematch link copied!', `Send it to ${opponentName || 'them'} and settle it`);
+  };
+
+  /** Native share sheet where available, clipboard everywhere else. */
+  const deliver = async (text: string, url: string, okTitle: string, okBody: string) => {
     if (navigator.share) {
-      try { await navigator.share({ text, url }); return; } catch {}
+      try { await navigator.share({ text, url }); return; } catch { /* user dismissed — fall through to copy */ }
     }
     try {
       await navigator.clipboard.writeText(text);
-      toast({ title: 'Challenge link copied!', description: `Share it and dare your friends to beat ${score} pts` });
+      toast({ title: okTitle, description: okBody });
     } catch {
-      toast({ title: 'Challenge link', description: url });
+      toast({ title: okTitle, description: url });
     }
   };
 
   const handleCopy = async () => {
     const text = getShareText();
+    trackEvent('share', { method: 'copy', mode: shareModeKey, score });
     try {
       await navigator.clipboard.writeText(text);
       toast({ title: 'Copied to clipboard!', description: 'Share it with your friends 🏀' });
@@ -162,6 +205,7 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
 
   const handleShare = async () => {
     const text = getShareText();
+    trackEvent('share', { method: 'native', mode: shareModeKey, score });
     if (navigator.share) {
       try { await navigator.share({ text }); } catch {}
     } else {
@@ -348,8 +392,17 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
           {sharingImage ? 'GENERATING...' : 'SAVE AS IMAGE'}
         </button>
 
+        {/* Send it back — the return leg of a challenge or duel */}
+        {(isChallengeMode || isDuelMode) && playerHistory.length > 0 && (
+          <button onClick={handleSendItBack}
+            className="w-full py-4 rounded-2xl font-display tracking-widest press-scale flex items-center justify-center gap-2 text-sm text-background"
+            style={{ background: 'hsl(var(--game-gold))', boxShadow: '0 4px 25px hsl(var(--game-gold) / 0.35)' }}>
+            <Swords className="w-4 h-4" /> SEND IT BACK
+          </button>
+        )}
+
         {/* Challenge a Friend */}
-        {!isChallengeMode && playerHistory.length > 0 && (
+        {!isChallengeMode && !isDuelMode && playerHistory.length > 0 && (
           <button onClick={handleChallengeFriend}
             className="w-full py-4 rounded-2xl border font-display tracking-widest press-scale flex items-center justify-center gap-2 text-sm"
             style={{ borderColor: 'hsl(var(--game-gold) / 0.4)', color: 'hsl(var(--game-gold))', background: 'hsl(var(--game-gold) / 0.08)' }}>
@@ -370,7 +423,7 @@ export function GameOverScreen({ score, bestStreak, totalCorrect, totalAnswered,
         {isChallengeMode && (
           <button onClick={() => onPlayAgain(tier)}
             className="w-full py-4 rounded-2xl glass border border-[rgba(255,255,255,0.1)] font-display tracking-widest press-scale flex items-center justify-center gap-2 text-foreground">
-            <RotateCcw className="w-4 h-4" /> REMATCH
+            <RotateCcw className="w-4 h-4" /> PLAY AGAIN
           </button>
         )}
         {nextTier && nextTierUnlocked && (

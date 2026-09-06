@@ -30,6 +30,12 @@ export type EventName =
   | 'duel_created'
   | 'duel_joined'
   | 'share'
+  | 'invite_sent'
+  | 'invite_opened'
+  | 'invite_converted'
+  | 'rematch_sent'
+  | 'challenge_landed'
+  | 'challenge_accepted'
   | 'gallery_view'
   | 'storage_error';
 
