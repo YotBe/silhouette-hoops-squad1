@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Player, DifficultyTier, PLAYERS, TIER_CONFIG, getPlayersByTier, generateChoices, getPlayerEra } from '@/data/players';
+import { applyVideoPolicy, recommendedPolicy } from '@/utils/videoHelper';
 import { generateAIClue } from '@/utils/aiClues';
 import { SFX, setSFXMuted } from './useSoundEffects';
 import { getDailyPlayers, getDailyChoices, isDailyChallengeCompleted, saveDailyResult, getDailyShareText, getDailySeed } from '@/utils/dailyChallenge';
@@ -204,7 +205,11 @@ export function useGameState() {
     const tierPlayers = getPlayersByTier(tier);
     const pool_all = tierPlayers.length > 0 ? tierPlayers : PLAYERS;
     const available = pool_all.filter(p => !usedIds.includes(p.id));
-    const pool = available.length > 0 ? available : pool_all;
+    const unfiltered = available.length > 0 ? available : pool_all;
+    // Prefer players we can actually show a clip for. The policy tracks how
+    // much video content exists, so the game leans on video as coverage grows
+    // instead of needing a code change.
+    const pool = applyVideoPolicy(unfiltered, recommendedPolicy(pool_all));
 
     // Era-weighted selection: Modern 50%, Classic 30%, OG 20%
     const modern = pool.filter(p => getPlayerEra(p) === 'modern');
