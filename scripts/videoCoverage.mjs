@@ -43,6 +43,8 @@ function parseManifest() {
   return assets;
 }
 
+const asJson = process.argv.includes('--json');
+
 const players = parsePlayers();
 const assets = parseManifest();
 const basename = f => f.slice(f.lastIndexOf('/') + 1);
@@ -64,6 +66,27 @@ for (const p of players) {
 const total = players.length;
 const pct = n => `${((n / total) * 100).toFixed(1)}%`;
 const totalBytes = [...assets.values()].reduce((s, a) => s + a.bytes, 0);
+
+if (asJson) {
+  // Machine-readable worklist, for feeding a clip-production pipeline.
+  console.log(JSON.stringify({
+    total,
+    counts: {
+      playable: playable.length,
+      missing: missing.length,
+      unplayable: unplayable.length,
+      noVideo: noVideo.length,
+    },
+    // Every clip still to produce, with the exact filename to save it as.
+    needed: [...missing, ...noVideo].map(p => ({
+      id: p.id,
+      name: p.name,
+      saveAs: `public/videos/${p.id}.mp4`,
+    })),
+    unplayable: unplayable.map(p => ({ id: p.id, file: p.videoFile, codec: p.codec })),
+  }, null, 2));
+  process.exit(unplayable.length > 0 ? 1 : 0);
+}
 
 console.log(`\nVideo coverage — ${total} players\n`);
 console.log(`  playable video      ${String(playable.length).padStart(4)}  ${pct(playable.length)}`);

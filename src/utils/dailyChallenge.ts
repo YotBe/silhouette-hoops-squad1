@@ -1,5 +1,6 @@
 import { PLAYERS, Player, generateChoices } from '@/data/players';
 import { storageGet, storageSet, storageGetJSON, storageSetJSON } from './safeStorage';
+import { selectablePool } from './videoHelper';
 
 function seededRandom(seed: string): () => number {
   let h = 0;
@@ -22,7 +23,10 @@ export function getDailySeed(): string {
 export function getDailyPlayers(): Player[] {
   const seed = getDailySeed();
   const rng = seededRandom(seed);
-  const shuffled = [...PLAYERS].sort(() => rng() - 0.5);
+  // Draw the daily from players we can show a clip for — this is the mode
+  // people share, so it should never land on the silhouette fallback.
+  const pool = selectablePool(PLAYERS);
+  const shuffled = [...pool].sort(() => rng() - 0.5);
   return shuffled.slice(0, Math.min(3, shuffled.length));
 }
 

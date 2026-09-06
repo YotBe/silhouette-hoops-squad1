@@ -514,6 +514,7 @@ export function GameScreen({
             <div className="relative w-full">
               <BlurredVideoPlayer
                 key={currentPlayer.id}
+                playerId={currentPlayer.id}
                 videoFile={currentPlayer.videoFile}
                 imageUrl={currentPlayer.imageUrl}
                 onReady={handleImageReady}

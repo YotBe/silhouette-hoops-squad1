@@ -35,17 +35,45 @@ export function videoAssetFor(videoFile: string | undefined): VideoAsset | undef
 }
 
 /**
+ * Extensions to try for a player's clip, best first. A playable container is
+ * always preferred over an unplayable one for the same player.
+ */
+const PREFERRED_EXT = ['mp4', 'webm', 'm4v', 'mov'] as const;
+
+/**
+ * Find a player's clip by naming convention: `public/videos/<playerId>.mp4`.
+ *
+ * Every clip in the project already follows this convention, so resolving by
+ * id rather than by a hand-written path means adding content is a file drop —
+ * name the clip after the player id, regenerate the manifest, and that player
+ * is live. No data edit, and no way for the path in players.ts to drift out of
+ * sync with what is on disk.
+ */
+export function videoAssetForPlayer(player: Pick<Player, 'id' | 'videoFile'>): VideoAsset | undefined {
+  for (const ext of PREFERRED_EXT) {
+    const asset = VIDEO_ASSET_BY_FILE.get(`${player.id}.${ext}`);
+    if (asset?.playable) return asset;
+  }
+  // Nothing universally playable — fall back to any clip for this player and
+  // let the browser probe decide (Safari can take the HEVC one).
+  for (const ext of PREFERRED_EXT) {
+    const asset = VIDEO_ASSET_BY_FILE.get(`${player.id}.${ext}`);
+    if (asset) return asset;
+  }
+  return videoAssetFor(player.videoFile);
+}
+
+/**
  * Whether a clip can actually be shown to a typical visitor.
  *
  * Absolute URLs are trusted — they are served from somewhere this manifest
  * cannot see. Local paths must exist and use a codec that plays everywhere:
  * an HEVC clip is present on disk but blank in Firefox.
  */
-export function hasPlayableVideo(player: Pick<Player, 'videoFile'>): boolean {
+export function hasPlayableVideo(player: Pick<Player, 'id' | 'videoFile'>): boolean {
   const file = player.videoFile;
-  if (!file) return false;
-  if (isAbsolute(file) || CDN_BASE) return true;
-  return videoAssetFor(file)?.playable === true;
+  if (file && (isAbsolute(file) || CDN_BASE)) return true;
+  return videoAssetForPlayer(player)?.playable === true;
 }
 
 /**
@@ -77,16 +105,16 @@ const CODEC_PROBE: Partial<Record<VideoAsset['codec'], string>> = {
  * Whether to attempt loading this clip in the current browser at all.
  * Prevents a large download that is guaranteed to fail.
  */
-export function shouldAttemptVideo(videoFile: string | undefined): boolean {
-  if (!videoFile) return false;
-  if (isAbsolute(videoFile) || CDN_BASE) return true;
-  const asset = videoAssetFor(videoFile);
+export function shouldAttemptVideo(player: Pick<Player, 'id' | 'videoFile'>): boolean {
+  const file = player.videoFile;
+  if (file && (isAbsolute(file) || CDN_BASE)) return true;
+  const asset = videoAssetForPlayer(player);
   if (!asset) return false; // not on disk — do not request a 404
   return asset.playable || canPlayCodec(asset.codec);
 }
 
 /** Players whose clip will really play — the pool a video-only round can use. */
-export function playersWithVideo<T extends Pick<Player, 'videoFile'>>(players: T[]): T[] {
+export function playersWithVideo<T extends Pick<Player, 'id' | 'videoFile'>>(players: T[]): T[] {
   return players.filter(hasPlayableVideo);
 }
 
@@ -98,11 +126,14 @@ function isAbsolute(file: string): boolean {
  * The URL to load a player's clip from: the CDN when one is configured,
  * otherwise the path as authored.
  */
-export function resolveVideoUrl(videoFile: string | undefined): string {
-  if (!videoFile) return '';
-  if (isAbsolute(videoFile)) return videoFile;
-  if (!CDN_BASE) return videoFile;
-  return `${CDN_BASE}/${videoFileName(videoFile)}`;
+export function resolveVideoUrl(player: Pick<Player, 'id' | 'videoFile'>): string {
+  const file = player.videoFile;
+  if (file && isAbsolute(file)) return file;
+  // The manifest is authoritative over the declared path: it reflects what is
+  // actually on disk, including a clip added since players.ts was last edited.
+  const name = videoAssetForPlayer(player)?.file ?? videoFileName(file);
+  if (!name) return '';
+  return CDN_BASE ? `${CDN_BASE}/${name}` : `/videos/${name}`;
 }
 
 export interface VideoCoverage {
@@ -140,17 +171,23 @@ export function videoCoverage(players: Player[]): VideoCoverage {
 export type VideoPolicy = 'video-only' | 'video-first' | 'any';
 
 /**
- * Below this many playable clips, a video-first round would serve the same
- * handful of players on repeat — worse than mixing in silhouettes. The policy
- * therefore follows content coverage rather than being hardcoded, so the game
- * becomes video-led on its own as clips are added.
+ * The clip is the game. A round that falls back to a still silhouette is a
+ * different, weaker game, so the default is to serve only players we can show
+ * a real clip for.
+ *
+ * The cost of this is repetition while the library is small: with a handful of
+ * clips a session will revisit the same players. That is a deliberate trade —
+ * a short video game beats a long silhouette one — and it resolves itself as
+ * clips are added, with no code change.
+ *
+ * Override per-deployment with VITE_VIDEO_POLICY=video-first|any.
  */
-export const MIN_VIDEO_POOL = 20;
+export const DEFAULT_VIDEO_POLICY: VideoPolicy = 'video-only';
 
-export function recommendedPolicy(players: Pick<Player, 'videoFile'>[]): VideoPolicy {
+export function recommendedPolicy(_players?: Pick<Player, 'id' | 'videoFile'>[]): VideoPolicy {
   const override = import.meta.env?.VITE_VIDEO_POLICY as VideoPolicy | undefined;
   if (override === 'video-only' || override === 'video-first' || override === 'any') return override;
-  return playersWithVideo(players).length >= MIN_VIDEO_POOL ? 'video-first' : 'any';
+  return DEFAULT_VIDEO_POLICY;
 }
 
 /**
@@ -161,9 +198,24 @@ export function recommendedPolicy(players: Pick<Player, 'videoFile'>[]): VideoPo
  * return empty — that is the caller's signal that there is no video content
  * left to show.
  */
-export function applyVideoPolicy<T extends Pick<Player, 'videoFile'>>(pool: T[], policy: VideoPolicy): T[] {
+export function applyVideoPolicy<T extends Pick<Player, 'id' | 'videoFile'>>(pool: T[], policy: VideoPolicy): T[] {
   if (policy === 'any') return pool;
   const withVideo = playersWithVideo(pool);
   if (policy === 'video-only') return withVideo;
   return withVideo.length > 0 ? withVideo : pool;
+}
+
+/**
+ * The pool a round should actually draw from.
+ *
+ * Applies the policy, but never hands back nothing: a caller that received an
+ * empty pool would have no player to ask about. Running out of clips reverts
+ * to the wider pool for that draw rather than ending the game mid-session.
+ */
+export function selectablePool<T extends Pick<Player, 'id' | 'videoFile'>>(
+  pool: T[],
+  policy: VideoPolicy = recommendedPolicy(),
+): T[] {
+  const filtered = applyVideoPolicy(pool, policy);
+  return filtered.length > 0 ? filtered : pool;
 }

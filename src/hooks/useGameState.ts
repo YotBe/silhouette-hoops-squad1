@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Player, DifficultyTier, PLAYERS, TIER_CONFIG, getPlayersByTier, generateChoices, getPlayerEra } from '@/data/players';
-import { applyVideoPolicy, recommendedPolicy } from '@/utils/videoHelper';
+import { selectablePool } from '@/utils/videoHelper';
 import { generateAIClue } from '@/utils/aiClues';
 import { SFX, setSFXMuted } from './useSoundEffects';
 import { getDailyPlayers, getDailyChoices, isDailyChallengeCompleted, saveDailyResult, getDailyShareText, getDailySeed } from '@/utils/dailyChallenge';
@@ -206,10 +206,8 @@ export function useGameState() {
     const pool_all = tierPlayers.length > 0 ? tierPlayers : PLAYERS;
     const available = pool_all.filter(p => !usedIds.includes(p.id));
     const unfiltered = available.length > 0 ? available : pool_all;
-    // Prefer players we can actually show a clip for. The policy tracks how
-    // much video content exists, so the game leans on video as coverage grows
-    // instead of needing a code change.
-    const pool = applyVideoPolicy(unfiltered, recommendedPolicy(pool_all));
+    // The clip is the game — only ask about players we can actually show.
+    const pool = selectablePool(unfiltered);
 
     // Era-weighted selection: Modern 50%, Classic 30%, OG 20%
     const modern = pool.filter(p => getPlayerEra(p) === 'modern');
@@ -242,7 +240,7 @@ export function useGameState() {
 
   const nextRandomPlayer = useCallback((usedIds: string[]) => {
     const available = PLAYERS.filter(p => !usedIds.includes(p.id));
-    const pool = available.length > 0 ? available : PLAYERS;
+    const pool = selectablePool(available.length > 0 ? available : PLAYERS);
     const player = pool[Math.floor(Math.random() * pool.length)];
     const choices = generateChoices(player, PLAYERS);
     return { player, choices, usedIds: [...usedIds, player.id] };
@@ -522,7 +520,7 @@ export function useGameState() {
         const newBuzzerTime = Math.max(prev.buzzerTimeLeft + delta, 0);
         const { player, choices, usedIds } = (() => {
           const available = PLAYERS.filter(p => !prev.usedPlayerIds.includes(p.id));
-          const pool = available.length > 0 ? available : PLAYERS;
+          const pool = selectablePool(available.length > 0 ? available : PLAYERS);
           const pl = pool[Math.floor(Math.random() * pool.length)];
           const ch = generateChoices(pl, PLAYERS);
           return { player: pl, choices: ch, usedIds: [...prev.usedPlayerIds, pl.id] };
