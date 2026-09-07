@@ -1,14 +1,20 @@
 import { useState } from 'react';
+import { resolveVideoUrl, shouldAttemptVideo } from '@/utils/videoHelper';
 
 interface Props {
+  /** Player id — clips resolve by convention from public/videos/<id>.mp4. */
+  playerId: string;
   videoFile: string;
   imageUrl?: string;
   onReady?: () => void;
 }
 
-export function BlurredVideoPlayer({ videoFile, imageUrl, onReady }: Props) {
+export function BlurredVideoPlayer({ playerId, videoFile, imageUrl, onReady }: Props) {
   const [contentReady, setContentReady] = useState(false);
-  const [useImageFallback, setUseImageFallback] = useState(!videoFile);
+  // Skip the request entirely for a clip this browser cannot play, or one
+  // that is not on disk — otherwise the user waits through a doomed download
+  // (or a 404) before the silhouette appears.
+  const [useImageFallback, setUseImageFallback] = useState(() => !shouldAttemptVideo({ id: playerId, videoFile }));
   const [showPlaceholder, setShowPlaceholder] = useState(false);
   const [readyFired, setReadyFired] = useState(false);
 
@@ -74,7 +80,7 @@ export function BlurredVideoPlayer({ videoFile, imageUrl, onReady }: Props) {
       ) : (
         /* Primary: disguise video — no filter needed, content IS the challenge */
         <video
-          src={videoFile}
+          src={resolveVideoUrl({ id: playerId, videoFile })}
           autoPlay
           loop
           muted

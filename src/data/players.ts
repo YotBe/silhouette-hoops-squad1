@@ -36,7 +36,7 @@ export const PLAYERS: Player[] = [
   {
     id: 'curry', name: 'Stephen Curry', team: 'Warriors', teamColor: '220 65% 33%',
     position: 'PG', number: 30, nickname: 'Chef Curry', tier: 'rookie',
-    videoFile: '/videos/curry.mov', imageUrl: espn(3975),
+    videoFile: '/videos/curry.mp4', imageUrl: espn(3975),
     college: 'Davidson', draftYear: 2009,
     facts: ['NBA all-time leader in 3-pointers made', 'Only unanimous MVP in NBA history (2016)', 'Revolutionized the modern NBA with deep shooting'],
     stats: { ppg: '24.8', rpg: '4.7', apg: '6.4' },
@@ -44,7 +44,7 @@ export const PLAYERS: Player[] = [
   {
     id: 'kyrie', name: 'Kyrie Irving', team: 'Mavericks', teamColor: '210 100% 30%',
     position: 'PG', number: 11, nickname: 'Uncle Drew', tier: 'rookie',
-    videoFile: '/videos/kyrie.mov', imageUrl: espn(6442),
+    videoFile: '/videos/kyrie.mp4', imageUrl: espn(6442),
     college: 'Duke', draftYear: 2011,
     facts: ['Hit the iconic 2016 Finals Game 7 three-pointer', 'Considered the best ball handler in NBA history', 'Played "Uncle Drew" in a Pepsi campaign turned movie'],
     stats: { ppg: '23.6', rpg: '3.9', apg: '5.7' },
